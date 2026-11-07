@@ -3,6 +3,8 @@
 
 #include "bridge_protocol.h"
 
+#include "sdkconfig.h"
+
 #include <stddef.h>
 
 /* One handler per command word (see bridge_protocol.h for the signature).
