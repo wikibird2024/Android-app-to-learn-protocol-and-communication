@@ -1,0 +1,51 @@
+MQTT 3.1.1 — publish / subscribe through a broker
+=================================================
+
+  sensor ──PUBLISH t/1──▶ ┌────────┐ ──▶ phone (sub t/#)
+                          │ broker │ ──▶ server (sub t/1)
+  phone ──SUBSCRIBE t/#─▶ └────────┘
+
+Nobody talks to each other directly: everyone
+connects OUT to the broker (works behind NAT).
+
+Packet layout
+  byte 0   type(4 bits) | flags(4 bits)
+  1..4     remaining length, 7 bits/byte,
+           high bit = "more" (128 → 80 01)
+  then     variable header + payload
+
+Session
+  CONNECT  client id, keep alive, clean session,
+           will (topic+message), user/password
+  CONNACK  return code (0 = accepted)
+
+QoS — who keeps a copy until it is safe
+  0  PUBLISH                       at most once
+  1  PUBLISH → PUBACK              at least once
+  2  PUBLISH → PUBREC → PUBREL     exactly once
+           → PUBCOMP
+  QoS is per hop: publisher→broker and
+  broker→subscriber are separate.
+
+Topics
+  sensors/kitchen/temp
+  +  one level      sensors/+/temp
+  #  all below      sensors/#
+  retained: broker keeps the last message and
+  gives it to every new subscriber
+
+Keep alive
+  silence for keepAlive s → client sends
+  PINGREQ; broker drops a client silent for
+  1.5 × keepAlive and publishes its WILL.
+
+Gotchas
+  • same client id twice: the broker kicks
+    the older connection (reconnect loops!)
+  • test.mosquitto.org is public: anyone can
+    read your topics
+  • password is plain text without TLS (8883)
+
+Try
+  Set a will topic, connect, then kill Wi-Fi:
+  a second client sees the will message.

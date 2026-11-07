@@ -1,0 +1,30 @@
+NFC — 13.56 MHz, a few centimetres
+==================================
+
+  phone (reader) ))) field powers the tag
+                 ◀── tag answers (load modulation)
+
+Layers
+  ISO 14443-A/B  radio + anti-collision (most tags)
+  NFC-A tag types: NTAG213/215/216 (Type 2),
+                   MIFARE Classic (needs keys)
+  NDEF           the message format every phone
+                 understands
+
+NDEF record
+  [MB ME CF SR IL TNF][type len][payload len]
+  [id len?][type][id][payload]
+  TNF 1 well-known: "T" text, "U" URI
+  URI prefix byte: 04 = "https://"
+
+UID: 4/7/10 bytes, readable by anyone, easy to
+clone — never use it alone as a door key.
+
+Gotchas
+  • metal behind a tag kills the field
+  • bank cards: no NDEF (ISO-DEP, encrypted)
+  • writing is permanent if the tag is locked
+
+Try
+  Write a URI, read it back, and compare the
+  bytes in Inside with the record layout.

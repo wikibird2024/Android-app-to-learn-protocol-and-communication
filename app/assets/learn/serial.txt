@@ -1,0 +1,34 @@
+UART — two wires, no clock
+==========================
+
+  idle ─┐ start ┌─┬─┬─┬─┬─┬─┬─┬─┐ (parity) stop ┌─ idle
+        └───────┘ d0 ... d7 (LSB first)        └
+  115200 8N1 = 115200 bit/s, 8 data, no parity,
+  1 stop → 10 bits per byte → 11.5 kB/s
+
+  TX ──▶ RX     both sides MUST agree on baud
+  RX ◀── TX     and format beforehand
+  GND ── GND    (always connect ground)
+
+Levels
+  3.3 V TTL (ESP32, STM32) — USB-UART adapters
+  RS-232 ±12 V — needs a MAX3232, never wire
+  straight to a microcontroller
+
+Control lines
+  DTR/RTS: ESP32 dev boards use them to reset
+  into the bootloader (that is how flashing
+  works); toggle them here to reset the board.
+
+Phone side
+  USB-OTG + CH340 / CP2102 / FTDI adapter,
+  drivers from the community library
+  usb-serial-for-android (mik3y).
+  Bluetooth SPP (HC-05, ESP32 Classic BT)
+  looks the same: a byte stream.
+
+Gotchas
+  • garbage text = wrong baud
+  • nothing at all = TX/RX swapped
+  • line endings: \n (Linux), \r\n (AT
+    commands, Windows), \r (old modems)

@@ -1,0 +1,29 @@
+mDNS + DNS-SD — find devices by name, no server
+===============================================
+
+  phone: "who has _http._tcp.local?"
+     │  UDP 224.0.0.251:5353 (multicast)
+     ▼
+  every device answers for itself:
+    PTR  _http._tcp.local → Kitchen._http._tcp.local
+    SRV  Kitchen... → esp32-kitchen.local : 80
+    TXT  Kitchen... → path=/api version=2
+    A    esp32-kitchen.local → 192.168.1.42
+
+Service type = _name._tcp or _name._udp
+  _http._tcp   web servers
+  _mqtt._tcp   brokers
+  _protolab._tcp  this app's ESP32 bridge
+
+ESP-IDF: espressif/mdns component
+  mdns_init(); mdns_hostname_set("bridge");
+  mdns_service_add(NULL, "_protolab", "_tcp",
+                   3333, NULL, 0);
+
+Gotchas
+  • only works on the same LAN segment (no
+    routing of 224.0.0.251)
+  • Android: needs a multicast lock; guest
+    Wi-Fi often blocks multicast
+  • "name.local" in a URL is not resolved by
+    every Android version: use the IP found

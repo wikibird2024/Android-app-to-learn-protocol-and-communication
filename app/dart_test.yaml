@@ -1,0 +1,4 @@
+tags:
+  integration:
+    # Needs outside services (a broker); run with --tags integration.
+    skip: false

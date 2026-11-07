@@ -1,0 +1,32 @@
+Zigbee — low-power mesh for lights and sensors
+==============================================
+
+  Layers
+  ┌ ZCL clusters: On/Off 0x0006, Level 0x0008,
+  │               Temperature 0x0402 ...
+  ├ APS: endpoints (1..240), bindings
+  ├ NWK: mesh routing, 16-bit short address
+  └ IEEE 802.15.4: 2.4 GHz, 250 kbit/s,
+                   64-bit IEEE address
+
+  Roles
+  coordinator  forms the network (one)
+  router       mains powered, relays (bulbs)
+  end device   sleeps on battery (sensors)
+
+Joining
+  coordinator "permit join" for N seconds →
+  device resets into pairing → gets the
+  network key → announces itself
+  (short address + IEEE address)
+
+On/Off command = ZCL frame to endpoint 1,
+cluster 0x0006, command 00 off / 01 on /
+02 toggle.
+
+Needs an 802.15.4 radio: ESP32-C6 or H2
+(not the S3). The bridge builds Zigbee only
+for those chips; on an S3 this tool says so.
+
+Community: Zigbee2MQTT maps every device to
+MQTT topics — a good design to read.

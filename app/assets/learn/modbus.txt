@@ -1,0 +1,39 @@
+Modbus — registers and coils, master asks, slave answers
+========================================================
+
+  Data model (addresses are 0-based on the wire)
+  table              access  datasheet  function
+  coils              R/W bit 0xxxx      1 read, 5/15 write
+  discrete inputs    R   bit 1xxxx      2
+  input registers    R   16b 3xxxx      4
+  holding registers  R/W 16b 4xxxx      3 read, 6/16 write
+  "40001" in a datasheet = holding register 0
+
+  PDU = [function][data]
+
+  RTU (RS-485, serial)
+  [unit][PDU][CRC16 lo][CRC16 hi]
+  frame ends after 3.5 character times of
+  silence; CRC-16/MODBUS (0xA001, init FFFF)
+  example: 11 03 00 6B 00 03 | 76 87
+
+  TCP (port 502)
+  [transaction][protocol 0][length][unit][PDU]
+  no CRC: TCP already checks
+
+  Exception reply: function | 0x80 + code
+  1 illegal function  2 illegal address
+  3 illegal value     4 device failure
+
+RS-485 wiring
+  A/B twisted pair, 120 Ω at both ends,
+  common ground, one master, up to 247 slaves.
+  Half-duplex: only one talks → one request
+  at a time.
+
+Gotchas
+  • off-by-one address (40001 vs 0)
+  • 32-bit values use 2 registers; word order
+    differs by vendor (try both)
+  • wrong baud/parity = silence, not errors
+    (common default 9600 8E1 or 19200 8E1)

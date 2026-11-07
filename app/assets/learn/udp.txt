@@ -1,0 +1,35 @@
+UDP — datagrams, no connection
+==============================
+
+  phone ── datagram ──▶ device      each send = one packet
+  phone ◀── datagram ── device      may be lost, doubled,
+                                    or arrive out of order
+
+  [ IP header 20 ][ UDP header 8 ][ payload ≤ ~1472 on Wi-Fi ]
+  UDP header: src port, dst port, length, checksum
+
+Why use it
+  • no handshake: first packet is data
+  • message borders are kept (one send = one
+    receive)
+  • broadcast / multicast possible (mDNS)
+
+What you must add yourself
+  • reliability: ack + resend (CoAP CON)
+  • ordering: sequence numbers
+  • fragmentation: keep payloads small
+
+Knobs
+  host:port     where to send
+  local port    0 = any; fix it when the device
+                answers to a known port
+
+Gotchas
+  • Android drops multicast unless an app holds
+    a multicast lock (this app does, for mDNS)
+  • NAT/routers forget UDP "connections" after
+    ~30 s of silence
+
+Try
+  CoAP tool → coap.me, then look at the UDP
+  datagrams in Inside: one request, one reply.

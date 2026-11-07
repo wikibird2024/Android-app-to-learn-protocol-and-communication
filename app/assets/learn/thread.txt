@@ -1,0 +1,29 @@
+Thread — IPv6 mesh on 802.15.4 (Matter's network)
+=================================================
+
+  same radio as Zigbee, different stack:
+  802.15.4 → 6LoWPAN → IPv6 → UDP → CoAP/Matter
+
+  every device has an IPv6 address; a border
+  router (Home Assistant, Apple TV, Nest hub)
+  connects the mesh to Wi-Fi/Ethernet.
+
+Roles: leader, router, end device (sleepy)
+Dataset: network name, PAN id, channel,
+network key, extended PAN id → "dataset
+active" shows it.
+
+OpenThread CLI (the community stack, used by
+ESP-IDF) — try in order:
+  dataset init new
+  dataset commit active
+  ifconfig up
+  thread start
+  state          → leader
+  ipaddr
+
+Matter commissioning (adding a device to a
+phone ecosystem) needs Google Play services
+on Android; not built here.
+
+Needs ESP32-C6/H2.

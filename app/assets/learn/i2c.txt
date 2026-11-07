@@ -1,0 +1,29 @@
+I2C — two wires, many devices, addresses
+========================================
+
+  3.3V ─┬────┬─── pull-ups (2.2k–10k)
+  SDA ──┴─┬──┴─┬──── data (open drain)
+  SCL ────┼────┼──── clock (master drives)
+       ESP32  BME280 0x76  OLED 0x3C
+
+One transaction (register read)
+  S [0x76<<1|W] A [reg D0] A
+  Sr [0x76<<1|R] A [data] N P
+  S start · Sr repeated start · P stop
+  A = receiver pulls SDA low (ACK)
+  N = NACK: "no more" (or nobody there)
+
+  7-bit address, shifted left, + R/W bit:
+  0x76 → write byte EC, read byte ED
+
+Speeds  100 kHz standard · 400 kHz fast
+
+Scan = try every address with a zero-length
+write; whoever ACKs is there.
+
+Gotchas
+  • no pull-ups → nothing answers
+  • datasheets mix 7-bit (0x76) and 8-bit
+    (0xEC) addresses
+  • a stuck SDA (device mid-byte after a
+    reset) → clock 9 pulses to free it

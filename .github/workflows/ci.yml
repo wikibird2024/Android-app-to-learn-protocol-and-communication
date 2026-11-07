@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  app:
+    name: App (analyze, tests, integration, APK)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.7
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      # Our own clients against the community broker (Mosquitto) and the
+      # fake bridge, which follows the same contract as the firmware.
+      - name: Integration tests (Mosquitto, fake bridge)
+        run: |
+          sudo apt-get install -y --no-install-recommends mosquitto >/dev/null
+          mosquitto -p 18830 -d
+          python3 tool/fake_bridge.py --port 13333 --modbus-port 11502 &
+          sleep 1
+          MQTT_TEST_PORT=18830 FAKE_BRIDGE_PORT=13333 FAKE_MODBUS_PORT=11502 \
+            flutter test --tags integration
+      # Signed with the debug key (android/app/build.gradle.kts): fine for
+      # side-loading on our own phones, not for the Play Store.
+      - run: flutter build apk --release
+      - name: Keep APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: protocol-lab-apk
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+
+  firmware-host:
+    name: Bridge host tests (plain C)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cmake -S firmware/bridge/test/host -B build-host
+          cmake --build build-host
+          ctest --test-dir build-host --output-on-failure
+
+  format:
+    name: clang-format check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # Same major version as the dev machine, so both agree on the layout.
+      - run: pip install clang-format==23.1.1
+      - run: |
+          git ls-files 'firmware/bridge/components/*.[ch]' 'firmware/bridge/main/*.[ch]' \
+                       'firmware/bridge/test/host/*.c' \
+            | xargs clang-format --dry-run --Werror

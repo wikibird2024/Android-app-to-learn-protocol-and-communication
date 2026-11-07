@@ -1,0 +1,27 @@
+LoRa / LoRaWAN — kilometres at a few hundred bit/s
+===================================================
+
+  LoRa = the radio (chirp spread spectrum,
+         Semtech SX127x / SX126x)
+  LoRaWAN = network on top: devices → gateways
+         → network server (TTN, ChirpStack)
+
+Radio knobs (trade range for speed)
+  SF7..SF12  spreading factor: +1 SF ≈ 2× time
+             on air, more range
+  BW 125/250/500 kHz
+  CR 4/5..4/8 coding rate
+  EU868 / AS923 (Vietnam) / US915 bands,
+  duty-cycle limits (EU: 1 %)
+
+LoRaWAN classes
+  A: device talks, then 2 short receive windows
+  B: scheduled windows · C: always listening
+
+Join: OTAA (DevEUI, JoinEUI, AppKey) → session
+keys; frames encrypted (AES-128) and counted.
+
+Not built yet: needs an SX1262 module on the
+bridge (SPI). Commands would be
+  lora init <freq> <sf> <bw>
+  lora send <hex> · events lora rx
