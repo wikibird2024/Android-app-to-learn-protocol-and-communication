@@ -2,3 +2,7 @@ dependencies:
   idf: ">=5.5"
   espressif/mdns: "^1.15.1"
   espressif/onewire_bus: "^1.1.2"
+  espressif/esp-zigbee-lib:
+    version: "~2.1.0"
+    rules:
+      - if: "target in [esp32c6, esp32h2]"

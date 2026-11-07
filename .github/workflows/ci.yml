@@ -13,7 +13,7 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -37,7 +37,17 @@ jobs:
             flutter test --tags integration
       # Signed with the debug key (android/app/build.gradle.kts): fine for
       # side-loading on our own phones, not for the Play Store.
-      - run: flutter build apk --release
+      # Job logs need a login to read; on failure the key lines also go out
+      # as an annotation, which anyone can read through the API.
+      - name: Build APK
+        run: |
+          set -o pipefail
+          if ! flutter build apk --release 2>&1 | tee build.log; then
+            summary=$(grep -iE "error|what went wrong|failed|exception|could not|unresolved" -A4 build.log \
+                      | grep -v "^--$" | head -80 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
+            echo "::error title=flutter build apk::${summary}"
+            exit 1
+          fi
       - name: Keep APK
         uses: actions/upload-artifact@v4
         with:

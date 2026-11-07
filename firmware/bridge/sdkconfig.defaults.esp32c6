@@ -1,1 +1,7 @@
-# ESP32-C6: same bridge; Zigbee is added with CONFIG_BRIDGE_ZIGBEE.
+# ESP32-C6: 802.15.4 radio → Zigbee coordinator, sharing the antenna with
+# Wi-Fi through software coexistence.
+CONFIG_BRIDGE_ZIGBEE=y
+CONFIG_ZB_ENABLED=y
+CONFIG_ZB_ZCZR=y
+CONFIG_ZB_RADIO_NATIVE=y
+CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y
