@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:universal_ble/universal_ble.dart';
 
 import '../../core/log/log_export.dart';
 import '../../core/settings/tool_settings.dart';
@@ -13,9 +13,14 @@ import '../link_session.dart';
 
 /// Lists the serial ports the phone can open right now: USB-UART adapters
 /// on the OTG port and paired Bluetooth SPP devices. Asks for the Bluetooth
-/// permission first, so paired devices can be listed.
+/// permissions first (universal_ble's request includes BLUETOOTH_CONNECT),
+/// so paired devices can be listed; USB still works if the user says no.
 Future<List<SerialDevice>> listSerialDevices() async {
-  await Permission.bluetoothConnect.request();
+  try {
+    await UniversalBle.requestPermissions();
+  } on Object {
+    // Denied: only USB ports will be listed.
+  }
   return SerialPorts.list();
 }
 

@@ -296,9 +296,10 @@ class MainActivity : FlutterActivity() {
             var socket: BluetoothSocket? = null
             try {
                 adapter.cancelDiscovery()
-                socket = adapter.getRemoteDevice(address).createRfcommSocketToServiceRecord(SPP_UUID)
-                socket.connect()
-                val connected = socket
+                val connected: BluetoothSocket =
+                    adapter.getRemoteDevice(address).createRfcommSocketToServiceRecord(SPP_UUID)
+                socket = connected
+                connected.connect()
                 val handle = addPortOnMain(object : OpenPort {
                     override fun write(bytes: ByteArray) {
                         connected.outputStream.write(bytes)
