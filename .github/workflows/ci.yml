@@ -64,4 +64,34 @@ jobs:
       - run: |
           git ls-files 'firmware/bridge/components/*.[ch]' 'firmware/bridge/main/*.[ch]' \
                        'firmware/bridge/test/host/*.c' \
+                       ':!firmware/bridge/test/host/unity/*' \
             | xargs clang-format --dry-run --Werror
+
+  firmware:
+    name: Bridge firmware (ESP-IDF v5.5.1, ${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    container: espressif/idf:v5.5.1
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [esp32s3, esp32c6]
+    defaults:
+      run:
+        working-directory: firmware/bridge
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py -B build-${{ matrix.target }} set-target ${{ matrix.target }} build
+          idf.py -B build-${{ matrix.target }} size
+      - name: Keep firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-${{ matrix.target }}
+          path: |
+            firmware/bridge/build-${{ matrix.target }}/*.bin
+            firmware/bridge/build-${{ matrix.target }}/bootloader/bootloader.bin
+            firmware/bridge/build-${{ matrix.target }}/partition_table/partition-table.bin
+            firmware/bridge/build-${{ matrix.target }}/flasher_args.json

@@ -1,0 +1,25 @@
+menu "Protocol Lab bridge"
+
+    config BRIDGE_TCP_PORT
+        int "TCP port for the app"
+        default 3333
+        range 1 65535
+
+    config BRIDGE_AP_SSID
+        string "Setup access point name"
+        default "protolab-bridge"
+
+    config BRIDGE_AP_PASSWORD
+        string "Setup access point password (8+ characters)"
+        default "protolab"
+        help
+            The access point stays on so the phone can always reach the
+            bridge at 192.168.4.1. Anyone with this password can drive the
+            buses, so change it outside the bench.
+
+    config BRIDGE_ZIGBEE
+        bool "Zigbee coordinator (needs an 802.15.4 radio: ESP32-C6/H2)"
+        default n
+        depends on SOC_IEEE802154_SUPPORTED
+
+endmenu
