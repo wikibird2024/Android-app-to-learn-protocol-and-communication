@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../bytes/hex.dart';
+import '../log/exchanges.dart';
 import '../log/session_log.dart';
 import 'frame_view.dart';
 
@@ -54,6 +55,7 @@ class _LogViewState extends State<LogView> {
   String _query = '';
   Set<Direction> _directions = Direction.values.toSet();
   TimeMode _timeMode = TimeMode.clock;
+  bool _isFlow = false;
 
   bool get _isFiltered => _query.isNotEmpty || _directions.length < Direction.values.length;
 
@@ -92,6 +94,7 @@ class _LogViewState extends State<LogView> {
             : null;
         final count = shown?.length ?? log.length;
         LogEntry entryAt(int index) => shown?[index] ?? log.entryAt(index);
+        final steps = _isFlow ? pairExchanges(shown ?? log.entries) : const <ExchangeStep?>[];
         if (_isFollowing) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
@@ -105,6 +108,7 @@ class _LogViewState extends State<LogView> {
                 content: Text('Paused · ${log.droppedCount} not shown'),
                 actions: [TextButton(onPressed: () => log.isPaused = false, child: const Text('Resume'))],
               ),
+            if (_isFlow && log.length > 0) const _FlowHeader(),
             Expanded(
               child: log.length == 0
                   ? Center(child: Text(widget.emptyText, textAlign: TextAlign.center))
@@ -120,11 +124,10 @@ class _LogViewState extends State<LogView> {
                           TimeMode.sinceStart => log.entryAt(0).time,
                           TimeMode.sincePrevious => index == 0 ? entry.time : entryAt(index - 1).time,
                         };
-                        return _LogTile(
-                          entry: entry,
-                          time: formatLogTime(entry, _timeMode, reference: reference),
-                          onTap: entry.direction == Direction.note ? null : () => _openFrame(shown ?? log.entries, entry),
-                        );
+                        final time = formatLogTime(entry, _timeMode, reference: reference);
+                        final onTap = entry.direction == Direction.note ? null : () => _openFrame(shown ?? log.entries, entry);
+                        if (_isFlow) return _FlowTile(entry: entry, step: steps[index], time: time, onTap: onTap);
+                        return _LogTile(entry: entry, time: time, onTap: onTap);
                       },
                     ),
             ),
@@ -165,6 +168,13 @@ class _LogViewState extends State<LogView> {
                 for (final direction in Direction.values)
                   CheckedPopupMenuItem(value: direction, checked: _directions.contains(direction), child: Text(direction.name)),
               ],
+            ),
+            IconButton(
+              tooltip: _isFlow ? 'Show as a list' : 'Show as a flow: phone ↔ device, replies paired',
+              isSelected: _isFlow,
+              icon: const Icon(Icons.swap_horiz),
+              selectedIcon: const Icon(Icons.view_list),
+              onPressed: () => setState(() => _isFlow = !_isFlow),
             ),
             IconButton(
               tooltip: 'Time: ${_timeMode.label}',
@@ -227,6 +237,134 @@ class _LogTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FlowHeader extends StatelessWidget {
+  const _FlowHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.labelMedium;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+      child: Row(children: [
+        Text('📱 phone', style: style),
+        const Spacer(),
+        Text('device / server 🔌', style: style),
+      ]),
+    );
+  }
+}
+
+/// One line of the flow: an arrow between the phone's and the device's
+/// lifelines, like a sequence diagram. Frames of one exchange share a
+/// colored number; the reply shows how long the device took.
+class _FlowTile extends StatelessWidget {
+  const _FlowTile({required this.entry, required this.step, required this.time, required this.onTap});
+
+  final LogEntry entry;
+  final ExchangeStep? step;
+  final String time;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final status = StatusColors.of(context);
+    final step = this.step;
+    final isNote = entry.direction == Direction.note;
+    final arrowColor = switch (entry.direction) {
+      Direction.sent => status.sent,
+      Direction.received => status.received,
+      Direction.note => status.note,
+    };
+    final badgeColor = step == null ? null : fieldColor(step.number - 1, theme.brightness).withValues(alpha: 1);
+    final detail = [
+      time,
+      if (step != null && step.isRetry) 'retry',
+      if (step?.sinceStart != null) '${step!.isLast ? '↩ reply after' : '+'} ${_formatDuration(step.sinceStart!)}',
+    ].join(' · ');
+    return InkWell(
+      onTap: onTap,
+      child: CustomPaint(
+        painter: _LadderPainter(direction: entry.direction, color: arrowColor, lifeline: theme.colorScheme.outlineVariant, hasError: entry.frame.error != null, error: theme.colorScheme.error),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 6, 22, 18),
+            child: Row(
+              children: [
+                if (step != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(color: badgeColor, borderRadius: BorderRadius.circular(8)),
+                    child: Text('${step.number}', style: monospace.copyWith(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: isNote ? CrossAxisAlignment.center : entry.direction == Direction.sent ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        entry.frame.summary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: monospace.copyWith(fontSize: 12, color: isNote ? status.note : null, fontStyle: isNote ? FontStyle.italic : null),
+                      ),
+                      Text(detail, style: monospace.copyWith(fontSize: 10, color: step != null && step.isRetry ? status.warn : theme.colorScheme.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _formatDuration(Duration duration) =>
+    duration.inMilliseconds >= 1000 ? '${(duration.inMilliseconds / 1000).toStringAsFixed(2)} s' : '${duration.inMilliseconds} ms';
+
+class _LadderPainter extends CustomPainter {
+  _LadderPainter({required this.direction, required this.color, required this.lifeline, required this.hasError, required this.error});
+
+  final Direction direction;
+  final Color color;
+  final Color lifeline;
+  final bool hasError;
+  final Color error;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const inset = 10.0;
+    final line = Paint()
+      ..color = lifeline
+      ..strokeWidth = 2;
+    canvas.drawLine(const Offset(inset, 0), Offset(inset, size.height), line);
+    canvas.drawLine(Offset(size.width - inset, 0), Offset(size.width - inset, size.height), line);
+    if (direction == Direction.note) return;
+    final y = size.height - 9;
+    final from = direction == Direction.sent ? inset : size.width - inset;
+    final to = direction == Direction.sent ? size.width - inset : inset;
+    final arrow = Paint()
+      ..color = hasError ? error : color
+      ..strokeWidth = 2;
+    canvas.drawLine(Offset(from, y), Offset(to, y), arrow);
+    final head = direction == Direction.sent ? -8.0 : 8.0;
+    canvas.drawPath(
+      Path()
+        ..moveTo(to, y)
+        ..lineTo(to + head, y - 5)
+        ..lineTo(to + head, y + 5)
+        ..close(),
+      Paint()..color = hasError ? error : color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_LadderPainter old) => old.direction != direction || old.color != color || old.hasError != hasError;
 }
 
 /// One frame per page: swipe (or the arrows) to walk the log like

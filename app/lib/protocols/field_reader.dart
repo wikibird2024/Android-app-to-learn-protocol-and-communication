@@ -95,6 +95,8 @@ class FieldReader {
             1,
             bit.describe((value >> bit.shift) & ((1 << bit.width) - 1)),
             note: bit.note,
+            bitShift: bit.shift,
+            bitWidth: bit.width,
           ),
       ],
     );

@@ -49,3 +49,19 @@ MarkdownStyleSheet learnStyle(ThemeData theme) {
     tableCellsPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
   );
 }
+
+/// The Learn page for a frame's protocol name (`Modbus RTU` → `modbus`),
+/// or null when no tool teaches it.
+String? learnToolFor(String protocol) {
+  final name = protocol.toLowerCase();
+  const prefixes = {
+    'mqtt': 'mqtt', 'modbus': 'modbus', 'coap': 'coap', 'http': 'http', 'ble': 'ble', 'gatt': 'ble', 'att': 'ble',
+    'i2c': 'i2c', 'spi': 'spi', 'can': 'can', '1-wire': 'onewire', 'ds18b20': 'onewire', 'bridge': 'bridge', 'console': 'bridge',
+    'uart': 'serial', 'serial': 'serial', 'tcp': 'tcp', 'udp': 'udp', 'websocket': 'websocket', 'dns': 'mdns', 'mdns': 'mdns',
+    'ndef': 'nfc', 'ntag': 'nfc', 'nfc': 'nfc', 'esp-now': 'espnow', 'zigbee': 'zigbee', 'thread': 'thread',
+  };
+  for (final entry in prefixes.entries) {
+    if (name.startsWith(entry.key)) return entry.value;
+  }
+  return null;
+}

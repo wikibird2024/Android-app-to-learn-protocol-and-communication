@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
 import '../../core/bytes/hex.dart';
-import '../../core/inspect/frame.dart';
 import '../../core/log/log_export.dart';
 import '../../core/log/session_log.dart';
 import '../../core/settings/tool_settings.dart';
@@ -135,7 +134,7 @@ class _I2cToolState extends ConsumerState<I2cTool> with BridgeToolState<I2cTool>
       final reply = await run('i2c xfer ${hex8(address)} ${written.isEmpty ? '-' : toHex(written, separator: '')} $readLength');
       if (reply is! Map) return;
       final read = parseHex('${reply['read'] ?? ''}');
-      log.received(describeI2cTransaction(address: address, written: written, read: read));
+      log.received(describeI2cTransaction(address: address, written: written, read: read, clockHz: int.tryParse(fields.text('hz')) ?? 100000));
       setState(() => _lastRead = read);
     } on FormatException catch (error) {
       if (mounted) showError(context, error);
@@ -205,16 +204,11 @@ class _SpiToolState extends ConsumerState<SpiTool> with BridgeToolState<SpiTool>
       final reply = await run('spi xfer ${toHex(written, separator: '')}');
       if (reply is! Map) return;
       final read = parseHex('${reply['read'] ?? ''}');
-      final bytes = Uint8List.fromList([...written, ...read]);
-      log.received(Frame(
-        protocol: 'SPI',
-        summary: 'MOSI ${toHex(written)} · MISO ${toHex(read)}',
-        bytes: bytes,
-        fields: [
-          for (var index = 0; index < written.length; index++)
-            Field('byte $index', index, 1, 'out ${hex8(written[index])} · in ${index < read.length ? hex8(read[index]) : '--'}',
-                note: index == 0 ? 'one clock pulse moves one bit each way' : ''),
-        ],
+      log.received(describeSpiTransfer(
+        written: written,
+        read: read,
+        mode: int.tryParse(fields.text('mode')) ?? 0,
+        clockHz: int.tryParse(fields.text('hz')) ?? 1000000,
       ));
       setState(() {});
     } on FormatException catch (error) {
@@ -300,7 +294,7 @@ class _CanToolState extends ConsumerState<CanTool> with BridgeToolState<CanTool>
     _events = bridge.events.where((event) => event['event'] == 'can').listen((event) {
       final frame = CanFrame.fromEvent(event);
       if (frame == null) return;
-      log.received(describeCanFrame(frame));
+      log.received(describeCanFrame(frame, bitrate: int.tryParse(fields.text('bitrate')) ?? 500000));
       final key = '${frame.isExtended ? 'x' : 's'}${frame.id}';
       final now = DateTime.now();
       final stats = _byId[key];
@@ -343,7 +337,7 @@ class _CanToolState extends ConsumerState<CanTool> with BridgeToolState<CanTool>
       final frame = CanFrame(id: id, data: data, isExtended: isExtended, isRemote: isRemote);
       final reply = await run('can send ${id.toRadixString(16)} ${data.isEmpty ? '-' : toHex(data, separator: '')}'
           '${isExtended ? ' ext' : ''}${isRemote ? ' rtr' : ''}');
-      if (!identical(reply, bridgeFailed)) log.sent(describeCanFrame(frame));
+      if (!identical(reply, bridgeFailed)) log.sent(describeCanFrame(frame, bitrate: int.tryParse(fields.text('bitrate')) ?? 500000));
     } on FormatException catch (error) {
       if (mounted) showError(context, error);
     }

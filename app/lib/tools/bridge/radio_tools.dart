@@ -6,8 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
 import '../../core/bytes/hex.dart';
-import '../../core/inspect/frame.dart';
 import '../../core/ui/form_parts.dart';
+import '../../protocols/radio/radio_frames.dart';
 import 'bus_tools.dart';
 
 // ---- Wi-Fi setup -----------------------------------------------------------
@@ -102,7 +102,7 @@ class _EspNowToolState extends ConsumerState<EspNowTool> with BridgeToolState<Es
     super.initState();
     _events = bridge.events.where((event) => event['event'] == 'espnow').listen((event) {
       final data = parseHex('${event['data'] ?? ''}');
-      log.received(Frame.raw('ESP-NOW', data, summary: 'from ${event['mac']} (${event['rssi']} dBm): ${textOrHex(data)}'));
+      log.received(describeEspNow(data, peer: '${event['mac']}', isSent: false, detail: ' (${event['rssi']} dBm)'));
     });
   }
 
@@ -118,7 +118,7 @@ class _EspNowToolState extends ConsumerState<EspNowTool> with BridgeToolState<Es
     final data = utf8.encode(fields['data'].text);
     if (data.isEmpty || data.length > 250) return showError(context, 'ESP-NOW carries 1..250 bytes');
     final reply = await run('espnow send $peer ${toHex(data, separator: '')}');
-    if (!identical(reply, bridgeFailed)) log.sent(Frame.raw('ESP-NOW', data, summary: 'to $peer: ${fields['data'].text}'));
+    if (!identical(reply, bridgeFailed)) log.sent(describeEspNow(data, peer: peer, isSent: true));
   }
 
   @override
@@ -169,7 +169,7 @@ class _ZigbeeToolState extends ConsumerState<ZigbeeTool> with BridgeToolState<Zi
   void initState() {
     super.initState();
     _events = bridge.events.where((event) => event['event'] == 'zigbee').listen((event) {
-      log.received(Frame(protocol: 'Zigbee', summary: '${event['type']} ${jsonEncode(event)}', bytes: utf8.encode(jsonEncode(event))));
+      log.received(describeZigbeeEvent(event));
       if (event['type'] == 'joined') unawaited(_refresh());
     });
   }
@@ -189,12 +189,7 @@ class _ZigbeeToolState extends ConsumerState<ZigbeeTool> with BridgeToolState<Zi
     final endpoint = fields.number('endpoint', min: 1, max: 240, label: 'Endpoint');
     final reply = await run('zb onoff $shortAddress $endpoint $action');
     if (!identical(reply, bridgeFailed)) {
-      log.sent(Frame(
-        protocol: 'Zigbee ZCL',
-        summary: 'On/Off cluster 0x0006 command $action → $shortAddress ep $endpoint',
-        bytes: utf8.encode('$shortAddress $endpoint $action'),
-        fields: const [Field('cluster', 0, 0, '0x0006 On/Off', note: 'commands: 0x00 off, 0x01 on, 0x02 toggle')],
-      ));
+      log.sent(describeZclOnOff(shortAddress: shortAddress, endpoint: endpoint, action: action));
     }
   }
 

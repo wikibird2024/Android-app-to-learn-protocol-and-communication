@@ -294,6 +294,9 @@ class MqttStreamSplitter {
   final _pending = BytesBuilder(copy: false);
   Uint8List _buffer = Uint8List(0);
 
+  /// Bytes of an unfinished packet waiting for the next TCP read.
+  int get waitingBytes => _buffer.length;
+
   /// Throws [FormatException] for a remaining length over 4 bytes: the
   /// stream is then broken and the connection must close.
   List<Uint8List> add(Uint8List chunk) {
@@ -363,16 +366,18 @@ MqttDecoded decodeMqtt(Uint8List bytes) {
       if (digit & 0x80 == 0) break;
     }
     reader.add('remaining length', lengthStart, '$remainingLength',
-        note: '${reader.offset - lengthStart} byte varint: 7 bits each, high bit = more');
+        note: '${reader.offset - lengthStart} byte varint: 7 bits each, high bit = more',
+        children: _varintSteps(reader.bytes, lengthStart, reader.offset));
     if (reader.remaining != remainingLength) {
       throw FormatException('remaining length says $remainingLength, frame has ${reader.remaining}');
     }
     if (type == null) throw FormatException('reserved packet type ${first >> 4}');
     final packet = _decodeBody(reader, type, first & 0x0f);
     if (!reader.isDone) throw const FormatException('extra bytes after the packet');
+    final (exchange, endsExchange) = _exchangeOf(packet);
     return MqttDecoded(
       packet,
-      Frame(protocol: 'MQTT', summary: _summary(packet), bytes: bytes, fields: reader.fields),
+      Frame(protocol: 'MQTT', summary: _summary(packet), bytes: bytes, fields: reader.fields, exchange: exchange, endsExchange: endsExchange, redecode: _redecode),
     );
   } on FormatException catch (error) {
     return MqttDecoded(
@@ -383,10 +388,47 @@ MqttDecoded decodeMqtt(Uint8List bytes) {
         bytes: bytes,
         fields: reader.fields,
         error: error.message,
+        redecode: _redecode,
       ),
     );
   }
 }
+
+Frame _redecode(Uint8List bytes) => decodeMqtt(bytes).frame;
+
+/// The varint worked out byte by byte: (byte & 0x7f) × 128^n, and the high
+/// bit says whether another byte follows.
+List<Field> _varintSteps(Uint8List bytes, int start, int end) => [
+  for (var index = start; index < end; index++)
+    Field(
+      'byte ${index - start + 1}',
+      index,
+      1,
+      '${hex8(bytes[index])} → ${bytes[index] & 0x7f} × ${_power128(index - start)}'
+          ' = ${(bytes[index] & 0x7f) * _power128(index - start)}',
+      note: bytes[index] & 0x80 != 0 ? 'high bit 1: another length byte follows' : 'high bit 0: last length byte',
+      children: [
+        Field('more', index, 1, bytes[index] & 0x80 != 0 ? 'yes' : 'no', bitShift: 7, bitWidth: 1),
+        Field('value', index, 1, '${bytes[index] & 0x7f}', bitShift: 0, bitWidth: 7),
+      ],
+    ),
+];
+
+int _power128(int exponent) => [1, 128, 16384, 2097152][exponent];
+
+/// Which request/reply a packet belongs to, for the Flow view.
+(String?, bool) _exchangeOf(MqttPacket packet) => switch (packet) {
+  MqttConnect() => ('MQTT connect', false),
+  MqttConnAck() => ('MQTT connect', true),
+  MqttPublish(packetId: final id?) => ('MQTT id $id', false),
+  MqttPacketIdOnly(:final type, :final packetId) => ('MQTT id $packetId', type == MqttPacketType.puback || type == MqttPacketType.pubcomp || type == MqttPacketType.unsuback),
+  MqttSubscribe(:final packetId) => ('MQTT id $packetId', false),
+  MqttSubAck(:final packetId) => ('MQTT id $packetId', true),
+  MqttUnsubscribe(:final packetId) => ('MQTT id $packetId', false),
+  MqttEmpty(type: MqttPacketType.pingreq) => ('MQTT ping', false),
+  MqttEmpty(type: MqttPacketType.pingresp) => ('MQTT ping', true),
+  _ => (null, false),
+};
 
 String _yesNo(int bit) => bit == 1 ? 'yes' : 'no';
 

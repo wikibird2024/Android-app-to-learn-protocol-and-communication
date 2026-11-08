@@ -7,7 +7,6 @@ import 'package:universal_ble/universal_ble.dart';
 
 import '../../app/theme.dart';
 import '../../core/bytes/hex.dart';
-import '../../core/inspect/frame.dart';
 import '../../core/log/session_log.dart';
 import '../../core/settings/tool_settings.dart';
 import '../../core/ui/form_parts.dart';
@@ -15,6 +14,7 @@ import '../../core/ui/frame_view.dart';
 import '../../core/ui/log_view.dart';
 import '../../core/ui/send_bar.dart';
 import '../../core/ui/tool_scaffold.dart';
+import '../../protocols/ble/att_pdu.dart';
 import '../../protocols/ble/ble_advert.dart';
 
 /// BLE through the community package universal_ble (BSD-3). Chosen over
@@ -193,13 +193,12 @@ class _GattScreenState extends ConsumerState<_GattScreen> {
     }
   }
 
-  Frame _valueFrame(String what, String characteristic, Uint8List value) =>
-      Frame.raw('GATT', value, summary: '$what ${shortUuid(characteristic)}: ${textOrHex(value)}');
-
   Future<void> _read(BleService service, BleCharacteristic characteristic) async {
     try {
+      final short = shortUuid(characteristic.uuid);
+      widget.log.sent(describeAtt(AttOpcode.readRequest, const [], characteristic: short, exchange: 'ATT read $short'));
       final value = await UniversalBle.read(_deviceId, service.uuid, characteristic.uuid);
-      widget.log.received(_valueFrame('read', characteristic.uuid, value));
+      widget.log.received(describeAtt(AttOpcode.readResponse, value, characteristic: short, exchange: 'ATT read $short', endsExchange: true));
       setState(() => _values[characteristic.uuid] = value);
     } on Object catch (error) {
       if (mounted) showError(context, error);
@@ -217,8 +216,12 @@ class _GattScreenState extends ConsumerState<_GattScreen> {
           settings: settings,
           onSend: (bytes) async {
             final withoutResponse = !characteristic.properties.contains(CharacteristicProperty.write);
+            final short = shortUuid(characteristic.uuid);
+            widget.log.sent(describeAtt(withoutResponse ? AttOpcode.writeCommand : AttOpcode.writeRequest, bytes, characteristic: short,
+                exchange: withoutResponse ? null : 'ATT write $short'));
             await UniversalBle.write(_deviceId, service.uuid, characteristic.uuid, bytes, withoutResponse: withoutResponse);
-            widget.log.sent(_valueFrame(withoutResponse ? 'write (no response)' : 'write', characteristic.uuid, bytes));
+            // The write future completing is Android telling us the Write Response came.
+            if (!withoutResponse) widget.log.received(describeAtt(AttOpcode.writeResponse, const [], characteristic: short, exchange: 'ATT write $short', endsExchange: true));
             if (sheetContext.mounted) Navigator.pop(sheetContext);
           },
         ),
@@ -235,7 +238,8 @@ class _GattScreenState extends ConsumerState<_GattScreen> {
         widget.log.note('notify off ${shortUuid(key)}');
       } else {
         _notifySubscriptions[key] = UniversalBle.characteristicValueStream(_deviceId, key).listen((value) {
-          widget.log.received(_valueFrame('notify', key, value));
+          final isIndication = !characteristic.properties.contains(CharacteristicProperty.notify);
+          widget.log.received(describeAtt(isIndication ? AttOpcode.indication : AttOpcode.notification, value, characteristic: shortUuid(key)));
           if (mounted) setState(() => _values[key] = value);
         });
         if (characteristic.properties.contains(CharacteristicProperty.notify)) {
@@ -243,8 +247,10 @@ class _GattScreenState extends ConsumerState<_GattScreen> {
         } else {
           await UniversalBle.subscribeIndications(_deviceId, service.uuid, key);
         }
-        // Subscribing writes 0x0001 (notify) or 0x0002 (indicate) to the CCCD descriptor 2902.
-        widget.log.note('notify on ${shortUuid(key)} (CCCD 2902 written)');
+        // Subscribing is a Write Request to the CCCD descriptor (2902):
+        // 01 00 = notify, 02 00 = indicate (little-endian bit field).
+        final isNotify = characteristic.properties.contains(CharacteristicProperty.notify);
+        widget.log.sent(describeAtt(AttOpcode.writeRequest, isNotify ? const [0x01, 0x00] : const [0x02, 0x00], characteristic: '2902 (CCCD of ${shortUuid(key)})', what: 'subscribe'));
       }
       setState(() {});
     } on Object catch (error) {

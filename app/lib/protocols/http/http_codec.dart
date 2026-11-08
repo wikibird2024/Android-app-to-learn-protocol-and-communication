@@ -117,7 +117,9 @@ Frame describeHttpMessage(Uint8List bytes, {required bool isRequest}) {
   } else {
     error = 'headers not finished';
   }
-  return Frame(protocol: 'HTTP', summary: text.split('\r\n').first, bytes: bytes, fields: fields, error: error);
+  // One request, one response per connection here (Connection: close).
+  return Frame(protocol: 'HTTP', summary: text.split('\r\n').first, bytes: bytes, fields: fields, error: error,
+      exchange: 'HTTP', endsExchange: !isRequest, redecode: (changed) => describeHttpMessage(changed, isRequest: isRequest));
 }
 
 int _indexOfBlankLine(Uint8List bytes) => _indexOf(bytes, const [13, 10, 13, 10], 0);

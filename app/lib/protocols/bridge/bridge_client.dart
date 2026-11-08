@@ -131,7 +131,7 @@ Frame describeBridgeLine(Uint8List line, {required bool isSent}) {
       offset += word.length + 1;
     }
     fields.add(Field('end of line', line.length - 1, 1, r'\n', note: 'the bridge acts on newline'));
-    return Frame(protocol: 'bridge', summary: words.skip(1).join(' '), bytes: line, fields: fields);
+    return Frame(protocol: 'bridge', summary: words.skip(1).join(' '), bytes: line, fields: fields, exchange: 'bridge #${words.first}');
   }
   try {
     final json = jsonDecode(text);
@@ -146,7 +146,8 @@ Frame describeBridgeLine(Uint8List line, {required bool isSent}) {
           : json['ok'] == true
           ? '#${json['id']} ok ${_short(jsonEncode(json['data']))}'
           : '#${json['id']} error ${json['error']}';
-      return Frame(protocol: 'bridge', summary: summary, bytes: line, fields: fields);
+      return Frame(protocol: 'bridge', summary: summary, bytes: line, fields: fields,
+          exchange: json['id'] == null ? null : 'bridge #${json['id']}', endsExchange: json['id'] != null);
     }
   } on FormatException {
     // Not JSON: fall through.

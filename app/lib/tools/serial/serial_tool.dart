@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:universal_ble/universal_ble.dart';
 
+import '../../core/inspect/frame.dart';
 import '../../core/log/log_export.dart';
+import '../../core/log/session_log.dart';
 import '../../core/settings/tool_settings.dart';
 import '../../core/transport/serial_link.dart';
 import '../../core/ui/form_parts.dart';
 import '../../core/ui/log_view.dart';
 import '../../core/ui/send_bar.dart';
 import '../../core/ui/tool_scaffold.dart';
+import '../../protocols/bus/wire_signals.dart';
 import '../link_session.dart';
 
 /// Lists the serial ports the phone can open right now: USB-UART adapters
@@ -189,6 +192,19 @@ class _SerialToolState extends ConsumerState<SerialTool> {
     try {
       final settings = SerialSettingsForm.read(_fields);
       await _fields.remember();
+      // Over USB the adapter drives real UART pins; Bluetooth SPP has none.
+      _session.describe = device.kind == SerialKind.bluetooth
+          ? null
+          : (bytes, direction) => Frame.raw('UART', bytes).copyWith(
+              wire: uartTrace(
+                bytes,
+                baud: settings.baudRate,
+                dataBits: settings.dataBits,
+                stopBits: settings.stopBits,
+                parity: UartParity.values.byName(settings.parity.name),
+                lane: direction == Direction.sent ? 'TX' : 'RX',
+              ),
+            );
       await _session.open(() => SerialPorts.open(device, settings));
       if (tabContext.mounted) DefaultTabController.of(tabContext).animateTo(1);
     } on Object catch (error) {

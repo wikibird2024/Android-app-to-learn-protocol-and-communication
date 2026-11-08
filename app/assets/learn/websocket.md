@@ -42,5 +42,6 @@ payload  XOR with the mask
 - A close frame carries a code: 1000 normal, 1001 going away, 1006 =
   dropped (no close frame).
 
-This tool uses `dart:io`, which hides the frame bytes, so the log shows
-whole messages.
+This tool writes the handshake and every frame by hand on a TCP (or TLS)
+socket, so Inside shows each FIN / opcode / MASK / length byte and the mask
+key. Switch Inside to **Flow** to see ping → pong pairs.

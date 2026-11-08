@@ -257,7 +257,11 @@ ModbusDecoded decodeModbusRtu(Uint8List bytes, {required bool isRequest}) {
     bytes.length - 2,
     2,
     got == expected ? '${hex16(got)} ok' : '${hex16(got)} wrong, expected ${hex16(expected)}',
-    note: 'CRC-16/MODBUS, low byte first',
+    note: 'CRC-16/MODBUS over bytes 0..${bytes.length - 3} (unit + PDU), sent low byte first',
+    children: [
+      Field('low byte', bytes.length - 2, 1, hex8(bytes[bytes.length - 2])),
+      Field('high byte', bytes.length - 1, 1, hex8(bytes[bytes.length - 1])),
+    ],
   );
   try {
     final unitId = reader.uint8('unit id', note: '1..247; 0 = broadcast');
@@ -265,12 +269,15 @@ ModbusDecoded decodeModbusRtu(Uint8List bytes, {required bool isRequest}) {
     if (!reader.isDone) throw const FormatException('extra bytes before the CRC');
     if (got != expected) throw FormatException('CRC ${hex16(got)} wrong, expected ${hex16(expected)}');
     return ModbusDecoded(
-      Frame(protocol: 'Modbus RTU', summary: 'unit $unitId ${result.$1}', bytes: bytes, fields: [...reader.fields, crcField]),
+      // RTU has no transaction id: one request is answered before the next.
+      Frame(protocol: 'Modbus RTU', summary: 'unit $unitId ${result.$1}', bytes: bytes, fields: [...reader.fields, crcField],
+          exchange: 'Modbus unit $unitId', endsExchange: !isRequest, redecode: (changed) => decodeModbusRtu(changed, isRequest: isRequest).frame),
       response: result.$2,
     );
   } on FormatException catch (error) {
     return ModbusDecoded(
-      Frame(protocol: 'Modbus RTU', summary: 'bad frame: ${error.message}', bytes: bytes, fields: [...reader.fields, crcField], error: error.message),
+      Frame(protocol: 'Modbus RTU', summary: 'bad frame: ${error.message}', bytes: bytes, fields: [...reader.fields, crcField], error: error.message,
+          redecode: (changed) => decodeModbusRtu(changed, isRequest: isRequest).frame),
     );
   }
 }
@@ -286,13 +293,15 @@ ModbusDecoded decodeModbusTcp(Uint8List bytes, {required bool isRequest}) {
     final result = isRequest ? _decodeRequestPdu(reader) : _decodeResponsePdu(reader, unitId);
     if (!reader.isDone) throw const FormatException('extra bytes after the PDU');
     return ModbusDecoded(
-      Frame(protocol: 'Modbus TCP', summary: '#$transactionId unit $unitId ${result.$1}', bytes: bytes, fields: reader.fields),
+      Frame(protocol: 'Modbus TCP', summary: '#$transactionId unit $unitId ${result.$1}', bytes: bytes, fields: reader.fields,
+          exchange: 'Modbus #$transactionId', endsExchange: !isRequest, redecode: (changed) => decodeModbusTcp(changed, isRequest: isRequest).frame),
       response: result.$2,
       transactionId: transactionId,
     );
   } on FormatException catch (error) {
     return ModbusDecoded(
-      Frame(protocol: 'Modbus TCP', summary: 'bad frame: ${error.message}', bytes: bytes, fields: reader.fields, error: error.message),
+      Frame(protocol: 'Modbus TCP', summary: 'bad frame: ${error.message}', bytes: bytes, fields: reader.fields, error: error.message,
+          redecode: (changed) => decodeModbusTcp(changed, isRequest: isRequest).frame),
     );
   }
 }
@@ -335,6 +344,11 @@ String _functionName(int code) =>
 (String, ModbusResponse?) _decodeResponsePdu(FieldReader reader, int unitId) {
   final code = reader.uint8('function', describe: (code) => code & 0x80 != 0 ? '${hex8(code)} exception for ${_functionName(code)}' : '$code ${_functionName(code)}');
   if (code & 0x80 != 0) {
+    final plain = reader.fields.removeLast();
+    reader.fields.add(Field(plain.name, plain.offset, 1, plain.value, note: 'a slave that fails answers with the function code + 0x80', children: [
+      Field('exception flag', plain.offset, 1, 'yes', bitShift: 7, bitWidth: 1),
+      Field('function', plain.offset, 1, '${code & 0x7f} ${_functionName(code)}', bitShift: 0, bitWidth: 7),
+    ]));
     final exception = reader.uint8('exception code', describe: (value) => '$value ${modbusExceptionCodes[value] ?? 'unknown'}');
     return (
       'exception ${modbusExceptionCodes[exception] ?? exception}',
@@ -345,8 +359,18 @@ String _functionName(int code) =>
   if (function == null) throw FormatException('unknown function $code');
   if (function.readsBits) {
     final byteCount = reader.uint8('byte count');
+    final packedStart = reader.offset;
     final packed = reader.take(byteCount, 'bits', note: 'first = lowest bit; padding bits are 0');
     final bits = [for (var index = 0; index < byteCount * 8; index++) packed[index ~/ 8] & (1 << (index % 8)) != 0];
+    // One child per bit, so the bit map shows coil n at bit n % 8 (LSB first).
+    final packedField = reader.fields.removeLast();
+    reader.fields.add(Field(packedField.name, packedField.offset, packedField.length, packedField.value, note: packedField.note, children: [
+      for (var byteIndex = 0; byteIndex < byteCount; byteIndex++)
+        Field('byte $byteIndex', packedStart + byteIndex, 1, hex8(packed[byteIndex]), children: [
+          for (var bit = 0; bit < 8; bit++)
+            Field('+${byteIndex * 8 + bit}', packedStart + byteIndex, 1, packed[byteIndex] & (1 << bit) != 0 ? '1' : '0', bitShift: bit, bitWidth: 1),
+        ]),
+    ]));
     return ('${function.label}: ${bits.where((bit) => bit).length} of ${bits.length} bits on', ModbusResponse(unitId: unitId, functionCode: code, bits: bits));
   }
   if (function.readsRegisters) {

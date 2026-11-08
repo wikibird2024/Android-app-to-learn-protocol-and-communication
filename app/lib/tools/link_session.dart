@@ -13,6 +13,12 @@ class LinkSession extends ChangeNotifier {
 
   final String protocol;
   final log = SessionLog();
+
+  /// Builds the log frame for a chunk; default: raw bytes. The serial tool
+  /// sets one that adds the UART wire drawing.
+  Frame Function(Uint8List bytes, Direction direction)? describe;
+
+  Frame _frame(Uint8List bytes, Direction direction) => describe?.call(bytes, direction) ?? Frame.raw(protocol, bytes);
   Link? _link;
   StreamSubscription<Uint8List>? _subscription;
   bool isBusy = false;
@@ -28,7 +34,7 @@ class LinkSession extends ChangeNotifier {
       final link = await opener();
       _link = link;
       _subscription = link.incoming.listen(
-        (bytes) => log.received(Frame.raw(protocol, bytes)),
+        (bytes) => log.received(_frame(bytes, Direction.received)),
         onDone: () {
           log.note('closed by the other side');
           _drop();
@@ -46,7 +52,7 @@ class LinkSession extends ChangeNotifier {
     final link = _link;
     if (link == null) throw StateError('not connected');
     await link.send(bytes);
-    log.sent(Frame.raw(protocol, bytes));
+    log.sent(_frame(bytes, Direction.sent));
   }
 
   void _drop() {

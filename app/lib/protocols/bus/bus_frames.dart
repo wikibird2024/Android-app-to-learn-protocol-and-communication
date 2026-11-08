@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import '../../core/bytes/hex.dart';
 import '../../core/inspect/frame.dart';
 import '../field_reader.dart';
+import 'wire_signals.dart';
 
 // Decoders for what the bridge reports from wired buses. The bridge sends
 // results as JSON; these turn them into the frames a logic analyzer would
@@ -17,6 +18,7 @@ Frame describeI2cTransaction({
   required int address,
   required Uint8List written,
   required Uint8List read,
+  int clockHz = 100000,
 }) {
   final bytes = BytesBuilder();
   final fields = <Field>[];
@@ -40,8 +42,30 @@ Frame describeI2cTransaction({
   final summary = read.isEmpty
       ? 'I2C ${hex8(address)} write ${toHex(written)}'
       : 'I2C ${hex8(address)}${written.isEmpty ? '' : ' write ${toHex(written)},'} read ${toHex(read)}';
-  return Frame(protocol: 'I2C', summary: summary, bytes: bytes.toBytes(), fields: fields);
+  return Frame(
+    protocol: 'I2C',
+    summary: summary,
+    bytes: bytes.toBytes(),
+    fields: fields,
+    wire: i2cTrace(address: address, written: written, read: read, clockHz: clockHz),
+  );
 }
+
+// ---- SPI -----------------------------------------------------------------
+
+/// One SPI transfer: byte i went out on MOSI while byte i came in on MISO.
+/// The bytes are the written ones followed by the read ones.
+Frame describeSpiTransfer({required Uint8List written, required Uint8List read, int mode = 0, int clockHz = 1000000}) => Frame(
+  protocol: 'SPI',
+  summary: 'MOSI ${toHex(written)} · MISO ${toHex(read)}',
+  bytes: Uint8List.fromList([...written, ...read]),
+  fields: [
+    for (var index = 0; index < written.length; index++)
+      Field('byte $index', index, 1, 'out ${hex8(written[index])} · in ${index < read.length ? hex8(read[index]) : '--'}',
+          note: index == 0 ? 'one clock pulse moves one bit each way' : ''),
+  ],
+  wire: spiTrace(mosi: written, miso: read, mode: mode, clockHz: clockHz),
+);
 
 /// Well-known 7-bit addresses, to guess what a scan found.
 const i2cKnownDevices = {
@@ -119,10 +143,11 @@ class CanFrame {
       : id.toRadixString(16).padLeft(3, '0');
 }
 
-/// Inside view of a CAN frame (the SocketCAN bytes). The controller adds
-/// SOF, CRC-15, ACK slot and bit stuffing on the wire; we only see the
-/// fields software can set.
-Frame describeCanFrame(CanFrame frame) {
+/// Inside view of a CAN frame: the SocketCAN bytes software sees (what
+/// pcap stores) plus the wire view of what the controller really sends:
+/// SOF, CRC-15, bit stuffing, the ACK slot.
+Frame describeCanFrame(CanFrame frame, {int bitrate = 500000}) {
+  final onWire = canTrace(id: frame.id, data: frame.data, isExtended: frame.isExtended, isRemote: frame.isRemote, bitrate: bitrate);
   final bytes = frame.toSocketCan();
   String yesNo(bool value) => value ? 'yes' : 'no';
   final fields = [
@@ -133,20 +158,25 @@ Frame describeCanFrame(CanFrame frame) {
       '${frame.idText} (${frame.isExtended ? '29-bit extended' : '11-bit standard'})',
       note: 'lower id wins arbitration: the id is also the priority',
       children: [
-        Field('EFF (bit 31)', 0, 1, yesNo(frame.isExtended), note: 'extended 29-bit id'),
-        Field('RTR (bit 30)', 0, 1, yesNo(frame.isRemote), note: 'remote request: asks for data'),
+        Field('EFF (bit 31)', 0, 1, yesNo(frame.isExtended), note: 'extended 29-bit id', bitShift: 7, bitWidth: 1),
+        Field('RTR (bit 30)', 0, 1, yesNo(frame.isRemote), note: 'remote request: asks for data', bitShift: 6, bitWidth: 1),
+        Field('ERR (bit 29)', 0, 1, 'no', note: 'error frame (Linux only)', bitShift: 5, bitWidth: 1),
         Field('identifier', 0, 4, '0x${frame.idText}'),
       ],
     ),
     Field('DLC', 4, 1, '${frame.data.length}', note: 'data length 0..8 (CAN FD: up to 64)'),
     const Field('padding', 5, 3, '00 00 00', note: 'SocketCAN struct padding, not on the wire'),
     Field('data', 8, frame.data.length, frame.data.isEmpty ? '(none)' : toHex(frame.data)),
+    Field('CRC-15 (on the wire)', 0, 0, '0x${onWire.crc.toRadixString(16).padLeft(4, '0')}',
+        note: 'added by the controller, not in these bytes; see the wire view'),
+    Field('stuff bits (on the wire)', 0, 0, '${onWire.stuffBits}', note: 'after 5 equal bits the controller adds one opposite bit'),
   ];
   return Frame(
     protocol: 'CAN',
     summary: '${frame.idText}${frame.isRemote ? ' RTR' : ''} [${frame.data.length}] ${toHex(frame.data)}',
     bytes: Uint8List.sublistView(bytes, 0, 8 + frame.data.length),
     fields: fields,
+    wire: onWire.trace,
   );
 }
 
@@ -188,7 +218,11 @@ Frame describeOneWireRom(Uint8List rom) {
     reader.uint8('CRC-8', describe: (crc) => crc == expected ? '${hex8(crc)} ok' : '${hex8(crc)} wrong, expected ${hex8(expected)}');
     if (!reader.isDone) throw const FormatException('ROM code is 8 bytes');
     return Frame(protocol: '1-Wire', summary: 'ROM ${toHex(rom, separator: '')}', bytes: rom, fields: reader.fields,
-        error: rom[7] == expected ? null : 'bad CRC');
+        error: rom[7] == expected ? null : 'bad CRC',
+        // The search finds ROMs bit by bit; the wire view shows the simpler
+        // Read ROM (0x33) a single device would answer.
+        wire: oneWireTrace(written: const [0x33], read: rom, writtenLabels: const ['Read ROM 0x33']),
+        redecode: describeOneWireRom);
   } on FormatException catch (error) {
     return Frame(protocol: '1-Wire', summary: 'bad ROM', bytes: rom, fields: reader.fields, error: error.message);
   }

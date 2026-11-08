@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/inspect/frame.dart';
 import '../../core/log/session_log.dart';
 import '../../core/transport/link.dart';
 import 'mqtt_packet.dart';
@@ -177,6 +178,7 @@ class MqttClient {
 
   void _onBytes(Uint8List chunk) {
     final List<Uint8List> packets;
+    final carried = _splitter.waitingBytes;
     try {
       packets = _splitter.add(chunk);
     } on FormatException catch (error) {
@@ -184,9 +186,9 @@ class MqttClient {
       unawaited(close());
       return;
     }
-    for (final bytes in packets) {
+    for (final (index, bytes) in packets.indexed) {
       final decoded = decodeMqtt(bytes);
-      log.received(decoded.frame);
+      log.received(_withDelivery(decoded.frame, isSplit: index == 0 && carried > 0, sharedWith: packets.length - 1));
       final packet = decoded.packet;
       if (packet == null) {
         // Spec 4.8: a protocol violation closes the connection.
@@ -195,6 +197,23 @@ class MqttClient {
       }
       _handle(packet);
     }
+  }
+
+  /// TCP has no message borders: say when this packet was cut across reads
+  /// or arrived glued to others, so the Inside view shows why MQTT needs its
+  /// remaining-length field.
+  static Frame _withDelivery(Frame frame, {required bool isSplit, required int sharedWith}) {
+    if (!isSplit && sharedWith == 0) return frame;
+    return frame.copyWith(fields: [
+      ...frame.fields,
+      Field(
+        'TCP delivery',
+        0,
+        0,
+        [if (isSplit) 'started in an earlier read', if (sharedWith > 0) 'came in one read with $sharedWith other packet${sharedWith == 1 ? '' : 's'}'].join(', '),
+        note: 'TCP is a byte stream; the remaining-length field finds where each packet ends',
+      ),
+    ]);
   }
 
   void _handle(MqttPacket packet) {

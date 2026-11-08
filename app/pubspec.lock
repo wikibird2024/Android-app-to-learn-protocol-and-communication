@@ -74,7 +74,7 @@ packages:
     source: hosted
     version: "0.3.5+5"
   crypto:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: crypto
       sha256: e3626ae6270383c9e3a549f34c9e4cd26c09ae6a9adaab2bf4737a00340efdc4
@@ -349,14 +349,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.0"
-  multicast_dns:
-    dependency: "direct main"
-    description:
-      name: multicast_dns
-      sha256: "134668a9605c747322d8c3eb0e89a4c0cbdedb29f8d2d5ae29d14daef724987b"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.3+1"
   ndef_record:
     dependency: transitive
     description:

@@ -49,6 +49,21 @@ void main() {
     });
   }
 
+  testWidgets('Back from the bridge returns to the bus tool that opened it', (tester) async {
+    await _pumpApp(tester);
+    await tester.enterText(find.descendant(of: find.byType(SearchBar), matching: find.byType(EditableText)), 'I2C');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('tool-i2c')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open ESP32 bridge'));
+    await tester.pumpAndSettle();
+    expect(find.text('ESP32 bridge'), findsWidgets);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('I2C'), findsWidgets, reason: 'Back must return to I2C, not Home');
+    expect(find.byType(SearchBar), findsNothing);
+  });
+
   test('every tool has a Learn note', () {
     for (final tool in toolCatalog) {
       final file = File('assets/learn/${tool.id}.md');

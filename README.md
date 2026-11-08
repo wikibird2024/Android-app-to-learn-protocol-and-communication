@@ -4,7 +4,8 @@ A phone app (Flutter, Android) plus an ESP32 bridge for **using and learning**
 the common embedded connection protocols. Every tool has the same four tabs:
 
 ```
-Configure │ Talk │ Inside (bytes, decoded field by field) │ Learn (mental model)
+Configure │ Talk │ Inside (fields, bit maps, Flow of request ↔ reply, wire
+                   signals for buses, "What if…" byte editor) │ Learn (mental model)
 ```
 
 Author: Hao Tran

@@ -15,6 +15,7 @@ Fake devices:
         sends id 0x123 every second with a counter
   1-Wire one DS18B20 (Maxim App Note 27 style ROM with a valid CRC) at 25.0625 °C
   Modbus --modbus-port N: a Modbus TCP slave, holding registers 0..99 = 100+address
+  WebSocket --ws-port N: echo server (RFC 6455): echoes text/binary, answers ping, closes politely
 
 Standard library only. One client at a time per port, like the firmware.
 
@@ -22,6 +23,8 @@ Standard library only. One client at a time per port, like the firmware.
 """
 
 import argparse
+import base64
+import hashlib
 import json
 import socket
 import socketserver
@@ -304,6 +307,56 @@ class ModbusHandler(socketserver.BaseRequestHandler):
             self.request.sendall(struct.pack(">HHHB", transaction, 0, len(reply) + 1, unit) + reply)
 
 
+class WebSocketHandler(socketserver.StreamRequestHandler):
+    """RFC 6455 echo server: the upgrade, then unmask client frames and echo
+    them unmasked. Enough to check the app's hand-written client."""
+
+    GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+    def handle(self):
+        headers = {}
+        request_line = self.rfile.readline().decode(errors="replace")
+        while True:
+            line = self.rfile.readline().decode(errors="replace").strip()
+            if not line:
+                break
+            name, _, value = line.partition(":")
+            headers[name.strip().lower()] = value.strip()
+        key = headers.get("sec-websocket-key")
+        if not request_line.startswith("GET ") or not key:
+            self.wfile.write(b"HTTP/1.1 400 Bad Request\r\n\r\n")
+            return
+        accept = base64.b64encode(hashlib.sha1((key + self.GUID).encode()).digest()).decode()
+        self.wfile.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                          f"Sec-WebSocket-Accept: {accept}\r\n\r\n").encode())
+        while True:
+            head = self.rfile.read(2)
+            if len(head) < 2:
+                return
+            opcode = head[0] & 0x0F
+            length = head[1] & 0x7F
+            if length == 126:
+                length = struct.unpack(">H", self.rfile.read(2))[0]
+            elif length == 127:
+                length = struct.unpack(">Q", self.rfile.read(8))[0]
+            mask = self.rfile.read(4) if head[1] & 0x80 else b"\0\0\0\0"
+            payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(self.rfile.read(length)))
+            reply_opcode = 0xA if opcode == 0x9 else opcode
+            self.wfile.write(self._frame(reply_opcode, payload))
+            if opcode == 0x8:
+                return
+
+    @staticmethod
+    def _frame(opcode, payload):
+        if len(payload) < 126:
+            header = bytes([0x80 | opcode, len(payload)])
+        elif len(payload) < 65536:
+            header = bytes([0x80 | opcode, 126]) + struct.pack(">H", len(payload))
+        else:
+            header = bytes([0x80 | opcode, 127]) + struct.pack(">Q", len(payload))
+        return header + payload
+
+
 class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
@@ -314,14 +367,18 @@ def main():
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=3333)
     parser.add_argument("--modbus-port", type=int, default=0, help="also run a Modbus TCP slave (0 = off)")
+    parser.add_argument("--ws-port", type=int, default=0, help="also run a WebSocket echo server (0 = off)")
     options = parser.parse_args()
 
     servers = [Server((options.host, options.port), BridgeHandler)]
     if options.modbus_port:
         servers.append(Server((options.host, options.modbus_port), ModbusHandler))
+    if options.ws_port:
+        servers.append(Server((options.host, options.ws_port), WebSocketHandler))
     for server in servers[1:]:
         threading.Thread(target=server.serve_forever, daemon=True).start()
-    print(f"fake bridge on {options.host}:{options.port}" + (f", Modbus TCP on {options.modbus_port}" if options.modbus_port else ""), flush=True)
+    print(f"fake bridge on {options.host}:{options.port}" + (f", Modbus TCP on {options.modbus_port}" if options.modbus_port else "")
+          + (f", WebSocket on {options.ws_port}" if options.ws_port else ""), flush=True)
     try:
         servers[0].serve_forever()
     except KeyboardInterrupt:

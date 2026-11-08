@@ -196,13 +196,24 @@ CoapDecoded decodeCoap(Uint8List bytes) {
       final fieldCount = reader.fields.length;
       final delta = extended(header >> 4, 'delta');
       final length = extended(header & 0x0f, 'length');
+      final extraFields = reader.fields.sublist(fieldCount);
       reader.fields.length = fieldCount;
+      final previous = number;
       number += delta;
+      final valueStart = reader.offset;
       final value = reader.take(length, 'value');
       reader.fields.removeLast();
       options.add(CoapOption(number, value));
       final name = coapOptionNames[number] ?? 'option $number';
-      reader.add(name, start, _optionText(number, value), note: 'delta $delta → option $number, $length bytes');
+      reader.add(name, start, _optionText(number, value), note: 'option $number = previous $previous + delta $delta', children: [
+        Field('option header', start, 1, hex8(header), children: [
+          Field('delta', start, 1, '${header >> 4}${header >> 4 >= 13 ? ' (extended below)' : ''}',
+              note: 'number − previous number: options must be sorted', bitShift: 4, bitWidth: 4),
+          Field('length', start, 1, '${header & 0x0f}${header & 0x0f >= 13 ? ' (extended below)' : ''}', note: 'value bytes', bitShift: 0, bitWidth: 4),
+        ]),
+        ...extraFields,
+        Field('value', valueStart, length, _optionText(number, value)),
+      ]);
     }
     final message = CoapMessage(
       type: CoapType.values[(first >> 4) & 3],
@@ -221,12 +232,18 @@ CoapDecoded decodeCoap(Uint8List bytes) {
             '${payload.isEmpty ? '' : ' ${textOrHex(payload)}'}',
         bytes: bytes,
         fields: reader.fields,
+        // CON → ACK (or RST) share the message id; the ACK closes it.
+        exchange: 'CoAP #$messageId',
+        endsExchange: message.type == CoapType.acknowledgement || message.type == CoapType.reset,
+        redecode: _redecode,
       ),
     );
   } on FormatException catch (error) {
-    return CoapDecoded(null, Frame(protocol: 'CoAP', summary: 'bad message: ${error.message}', bytes: bytes, fields: reader.fields, error: error.message));
+    return CoapDecoded(null, Frame(protocol: 'CoAP', summary: 'bad message: ${error.message}', bytes: bytes, fields: reader.fields, error: error.message, redecode: _redecode));
   }
 }
+
+Frame _redecode(Uint8List bytes) => decodeCoap(bytes).frame;
 
 String _optionText(int number, Uint8List value) => switch (number) {
   3 || 8 || 11 || 15 => '"${utf8.decode(value, allowMalformed: true)}"',

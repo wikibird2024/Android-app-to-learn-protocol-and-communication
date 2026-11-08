@@ -127,7 +127,11 @@ Frame decodeAdvert(Uint8List bytes) {
         children: [
           Field('length', start, 1, '$length', note: 'type byte + data'),
           Field('AD type', start + 1, 1, hex8(type)),
-          Field('data', start + 2, data.length, data.isEmpty ? '(empty)' : toHex(data)),
+          Field('data', start + 2, data.length, data.isEmpty ? '(empty)' : toHex(data), children: [
+            if (type == 0x01 && data.isNotEmpty)
+              for (final (bit, name) in _flagBits)
+                Field(name, start + 2, 1, data[0] & (1 << bit) != 0 ? 'yes' : 'no', bitShift: bit, bitWidth: 1),
+          ]),
         ],
       ));
     }
@@ -136,11 +140,21 @@ Frame decodeAdvert(Uint8List bytes) {
       summary: '${bytes.length} bytes: ${names.join(', ')}${bytes.length > 31 ? ' (extended: over 31 bytes)' : ''}',
       bytes: bytes,
       fields: reader.fields,
+      redecode: decodeAdvert,
     );
   } on FormatException catch (error) {
-    return Frame(protocol: 'BLE advert', summary: 'bad advert', bytes: bytes, fields: reader.fields, error: error.message);
+    return Frame(protocol: 'BLE advert', summary: 'bad advert', bytes: bytes, fields: reader.fields, error: error.message, redecode: decodeAdvert);
   }
 }
+
+/// Bits of the Flags AD structure (Core Spec Supplement, part A 1.3).
+const _flagBits = [
+  (0, 'LE limited discoverable'),
+  (1, 'LE general discoverable'),
+  (2, 'BR/EDR not supported'),
+  (3, 'LE + BR/EDR controller'),
+  (4, 'LE + BR/EDR host'),
+];
 
 String _describeAdData(int type, Uint8List data) {
   switch (type) {

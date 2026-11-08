@@ -1,6 +1,9 @@
 import 'dart:typed_data';
 
 import '../bytes/hex.dart';
+import 'wire_trace.dart';
+
+export 'wire_trace.dart';
 
 /// One named part of a frame: where it sits in the bytes and what it means.
 /// This is the "Inside" view's unit: every decoder explains its bytes as a
@@ -13,6 +16,8 @@ class Field {
     this.value, {
     this.note = '',
     this.children = const [],
+    this.bitShift,
+    this.bitWidth = 0,
   });
 
   final String name;
@@ -30,6 +35,13 @@ class Field {
   /// Bit fields of a flags byte, or the parts of a nested structure.
   final List<Field> children;
 
+  /// For a bit field: its lowest bit inside the byte at [offset] (0 = LSB)
+  /// and how many bits it has. Null for whole-byte fields. The Inside view
+  /// draws these as a `7 6 5 4 3 2 1 0` bit map.
+  final int? bitShift;
+  final int bitWidth;
+
+  bool get isBits => bitShift != null;
   int get end => offset + length;
 
   @override
@@ -45,6 +57,10 @@ class Frame {
     required this.bytes,
     this.fields = const [],
     this.error,
+    this.exchange,
+    this.endsExchange = false,
+    this.wire,
+    this.redecode,
   });
 
   /// Raw bytes with only a single "payload" field, for links with no codec.
@@ -66,4 +82,34 @@ class Frame {
 
   /// Set when the bytes broke a rule of the protocol.
   final String? error;
+
+  /// Which request/reply this frame belongs to, for the Flow view: frames
+  /// with the same key are one exchange (MQTT packet id 7, CoAP message id,
+  /// Modbus transaction, bridge request id). Null: not part of one.
+  final String? exchange;
+
+  /// This frame finishes its exchange (CONNACK, PUBCOMP, CoAP ACK, Modbus
+  /// reply). The next frame with the same key starts a new exchange.
+  final bool endsExchange;
+
+  /// How the bytes look as signals on the wire (UART, I2C, SPI, CAN,
+  /// 1-Wire), drawn from the bytes. Null for protocols with no wire of
+  /// their own (TCP, UDP: the phone's network stack owns those).
+  final WireTrace? wire;
+
+  /// Decodes changed bytes the same way, for the "what if" editor. Null
+  /// when the frame cannot be rebuilt from bytes alone.
+  final Frame Function(Uint8List bytes)? redecode;
+
+  Frame copyWith({String? summary, List<Field>? fields, String? exchange, bool? endsExchange, WireTrace? wire, Frame Function(Uint8List bytes)? redecode}) => Frame(
+    protocol: protocol,
+    summary: summary ?? this.summary,
+    bytes: bytes,
+    fields: fields ?? this.fields,
+    error: error,
+    exchange: exchange ?? this.exchange,
+    endsExchange: endsExchange ?? this.endsExchange,
+    wire: wire ?? this.wire,
+    redecode: redecode ?? this.redecode,
+  );
 }

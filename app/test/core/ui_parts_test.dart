@@ -9,6 +9,10 @@ import 'package:protocol_lab/core/log/session_log.dart';
 import 'package:protocol_lab/core/ui/form_parts.dart';
 import 'package:protocol_lab/core/ui/frame_view.dart';
 import 'package:protocol_lab/core/ui/log_view.dart';
+import 'package:protocol_lab/core/ui/wire_view.dart';
+import 'package:protocol_lab/protocols/bus/bus_frames.dart';
+import 'package:protocol_lab/protocols/modbus/modbus_codec.dart';
+import 'package:protocol_lab/protocols/mqtt/mqtt_packet.dart';
 
 Frame _frame(String summary, List<int> bytes) => Frame(protocol: 'mqtt', summary: summary, bytes: Uint8List.fromList(bytes));
 
@@ -109,5 +113,39 @@ void main() {
     await tester.pump();
     expect(find.text('a number 1..65535'), findsNothing);
     controller.dispose();
+  });
+
+  testWidgets('What if: breaking a byte makes the decoder report the CRC', (tester) async {
+    final frame = decodeModbusRtu(Uint8List.fromList([0x11, 0x03, 0x00, 0x6b, 0x00, 0x03, 0x76, 0x87]), isRequest: true).frame;
+    await tester.pumpWidget(MaterialApp(theme: lightTheme, home: Scaffold(body: FrameView(frame: frame))));
+    await tester.tap(find.text('What if…'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('wrong, expected'), findsNothing);
+    await tester.enterText(find.byType(TextField), '11 03 00 6c 00 03 76 87');
+    await tester.pump();
+    expect(find.textContaining('wrong, expected'), findsWidgets);
+  });
+
+  testWidgets('Flow view pairs PINGREQ with PINGRESP and shows the reply time', (tester) async {
+    var now = DateTime(2026, 11, 8, 12);
+    final log = SessionLog(clock: () => now)..sent(decodeMqtt(Uint8List.fromList([0xc0, 0x00])).frame);
+    now = now.add(const Duration(milliseconds: 42));
+    log.received(decodeMqtt(Uint8List.fromList([0xd0, 0x00])).frame);
+    await tester.pumpWidget(MaterialApp(theme: lightTheme, home: Scaffold(body: LogView(log: log, showTools: true))));
+    await tester.tap(find.byTooltip('Show as a flow: phone ↔ device, replies paired'));
+    await tester.pump();
+    expect(find.textContaining('reply after 42 ms'), findsOneWidget);
+    log.dispose();
+  });
+
+  testWidgets('a flags byte shows its bit map; a bus frame shows its wire view', (tester) async {
+    final frame = describeI2cTransaction(address: 0x76, written: Uint8List.fromList([0xd0]), read: Uint8List.fromList([0x60]));
+    await tester.pumpWidget(MaterialApp(theme: lightTheme, home: Scaffold(body: FrameView(frame: frame))));
+    expect(find.text('On the wire'), findsOneWidget);
+    expect(find.byType(WireView), findsOneWidget);
+    final publish = decodeMqtt(encodeMqtt(MqttPublish(topic: 't', payload: Uint8List(1), qos: 1, packetId: 1))).frame;
+    await tester.pumpWidget(MaterialApp(theme: lightTheme, home: Scaffold(body: FrameView(frame: publish))));
+    expect(find.textContaining('bits 7–4  packet type = PUBLISH'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

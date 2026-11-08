@@ -3,24 +3,26 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:multicast_dns/multicast_dns.dart';
 
 import '../../core/log/session_log.dart';
 import '../../core/settings/tool_settings.dart';
+import '../../core/transport/mdns_socket.dart';
 import '../../core/ui/form_parts.dart';
 import '../../core/ui/tool_scaffold.dart';
+import '../../protocols/dns/dns_codec.dart';
 
 class _FoundService {
-  _FoundService(this.instance, this.target, this.port);
+  _FoundService(this.instance);
   final String instance;
-  final String target;
-  final int port;
+  String target = '';
+  int port = 0;
   final addresses = <String>{};
   final text = <String>[];
 }
 
 /// DNS-SD over mDNS (RFC 6762/6763): ask "who offers _service._tcp?" on
-/// 224.0.0.251:5353 and every device answers for itself.
+/// 224.0.0.251:5353 and every device answers for itself. The DNS packets
+/// are built and read by hand (protocols/dns), so Inside shows them.
 ///   PTR _http._tcp.local → "Kitchen._http._tcp.local"
 ///   SRV Kitchen... → esp32.local:80      A esp32.local → 192.168.1.42
 ///   TXT Kitchen... → path=/api, version=2
@@ -56,34 +58,70 @@ class _MdnsToolState extends ConsumerState<MdnsTool> {
       _found.clear();
     });
     if (tabContext.mounted) DefaultTabController.of(tabContext).animateTo(1);
-    final client = MDnsClient();
+    MdnsSocket? socket;
+    StreamSubscription<Object?>? subscription;
+    final records = <DnsRecord>[];
     try {
       await _system.invokeMethod<void>('multicastLock', {'hold': true}).catchError((Object _) {});
-      await client.start();
-      _log.note('query PTR $service');
-      const window = Duration(seconds: 4);
-      await for (final ptr in client.lookup<PtrResourceRecord>(ResourceRecordQuery.serverPointer(service), timeout: window)) {
-        _log.note('PTR → ${ptr.domainName}');
-        await for (final srv in client.lookup<SrvResourceRecord>(ResourceRecordQuery.service(ptr.domainName), timeout: window)) {
-          _log.note('SRV ${ptr.domainName} → ${srv.target}:${srv.port}');
-          final found = _found.putIfAbsent(ptr.domainName, () => _FoundService(ptr.domainName, srv.target, srv.port));
-          await for (final txt in client.lookup<TxtResourceRecord>(ResourceRecordQuery.text(ptr.domainName), timeout: window)) {
-            found.text.add(txt.text);
-          }
-          await for (final address in client.lookup<IPAddressResourceRecord>(ResourceRecordQuery.addressIPv4(srv.target), timeout: window)) {
-            _log.note('A ${srv.target} → ${address.address.address}');
-            found.addresses.add(address.address.address);
-          }
-          if (mounted) setState(() {});
-        }
+      final opened = socket = await MdnsSocket.open();
+      _log.note('joined 224.0.0.251:5353 (multicast lock held)');
+      bool isOurs(DnsRecord record) =>
+          record.name == service || _found.containsKey(record.name) || _found.values.any((found) => found.target == record.name);
+      subscription = opened.datagrams.listen((datagram) {
+        final decoded = decodeDns(datagram.bytes);
+        final message = decoded.message;
+        // Everyone's queries and unrelated answers pass by on the group:
+        // keep only answers about this search.
+        if (message == null || !message.isResponse || !message.records.any(isOurs)) return;
+        _log.received(decoded.frame.copyWith(summary: 'from ${datagram.from.address}: ${decoded.frame.summary}'));
+        records.addAll(message.records);
+        _collect(records, service);
+        if (mounted) setState(() {});
+      });
+      void ask(List<DnsQuestion> questions) {
+        final bytes = encodeDnsQuery(questions);
+        _log.sent(decodeDns(bytes).frame);
+        opened.send(bytes);
       }
+
+      ask([DnsQuestion(service, dnsTypeCode('PTR'))]);
+      await Future<void>.delayed(const Duration(seconds: 1));
+      ask([DnsQuestion(service, dnsTypeCode('PTR'))]); // multicast has no retransmit: ask twice
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      // Responders usually add SRV/TXT/A as "additional" records; ask only
+      // for what is still missing.
+      for (final found in _found.values.toList()) {
+        if (found.port == 0) ask([DnsQuestion(found.instance, dnsTypeCode('SRV')), DnsQuestion(found.instance, dnsTypeCode('TXT'))]);
+        if (found.target.isNotEmpty && found.addresses.isEmpty) ask([DnsQuestion(found.target, dnsTypeCode('A'))]);
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
       _log.note('done: ${_found.length} found');
     } on Object catch (error) {
       if (mounted) showError(context, error);
     } finally {
-      client.stop();
+      await subscription?.cancel();
+      socket?.close();
       await _system.invokeMethod<void>('multicastLock', {'hold': false}).catchError((Object _) {});
       if (mounted) setState(() => _isSearching = false);
+    }
+  }
+
+  /// PTR → instance; SRV → host:port; TXT → key=value; A → address.
+  void _collect(List<DnsRecord> records, String service) {
+    for (final record in records.where((record) => record.type == dnsTypeCode('PTR') && record.name == service && record.target != null)) {
+      _found.putIfAbsent(record.target!, () => _FoundService(record.target!));
+    }
+    for (final found in _found.values) {
+      for (final record in records.where((record) => record.name == found.instance)) {
+        if (record.type == dnsTypeCode('SRV')) {
+          found.target = record.target ?? '';
+          found.port = record.port ?? 0;
+        }
+        if (record.type == dnsTypeCode('TXT')) found.text.addAll(record.texts.where((text) => !found.text.contains(text)));
+      }
+      for (final record in records.where((record) => record.type == dnsTypeCode('A') && record.name == found.target && record.address != null)) {
+        found.addresses.add(record.address!);
+      }
     }
   }
 

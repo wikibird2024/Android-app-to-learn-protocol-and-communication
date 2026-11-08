@@ -11,8 +11,8 @@ the bytes and the mental model. Author: Hao Tran.
 # App (Flutter 3.47.7). On this machine /mnt/storage may be unmounted:
 export PUB_CACHE=$HOME/sdk/pub-cache PATH=$HOME/sdk/flutter/bin:$PATH
 cd app && flutter analyze && flutter test
-python3 tool/fake_bridge.py --port 13333 --modbus-port 11502 & mosquitto -p 18830 -d
-MQTT_TEST_PORT=18830 FAKE_BRIDGE_PORT=13333 FAKE_MODBUS_PORT=11502 flutter test --tags integration
+python3 tool/fake_bridge.py --port 13333 --modbus-port 11502 --ws-port 18081 & mosquitto -p 18830 -d
+MQTT_TEST_PORT=18830 FAKE_BRIDGE_PORT=13333 FAKE_MODBUS_PORT=11502 FAKE_WS_PORT=18081 flutter test --tags integration
 
 # Bridge plain-C tests (no ESP-IDF needed)
 cmake -S firmware/bridge/test/host -B build-host && cmake --build build-host && ctest --test-dir build-host
@@ -35,12 +35,18 @@ CI turns APK build errors into a readable annotation.
   `lib/tools/<t>/` never parse bytes themselves.
 - **Every frame goes through `SessionLog`** as a decoded `Frame` (fields with
   byte offsets) → Inside tab, CSV, pcap. Decoders never throw on bad bytes:
-  they return a frame with `error`.
+  they return a frame with `error`. A decoder also fills, where it can:
+  `Field.bitShift/bitWidth` (bit map), `Frame.exchange/endsExchange`
+  (request ↔ reply pairing in the Flow view), `Frame.wire` (signals drawn
+  from the bytes, `protocols/bus/wire_signals.dart`) and `Frame.redecode`
+  (the "What if…" editor).
 - **Byte formats are hand-written; native drivers come from community
-  packages** (universal_ble, nfc_manager, multicast_dns, share_plus) or
+  packages** (universal_ble, nfc_manager, share_plus, crypto for SHA-1) or
   community native libraries (usb-serial-for-android via the Kotlin channel
   in `MainActivity.kt`). Check a package's license and build files before
   adding it (flutter_blue_plus: commercial license; usb_serial: jcenter).
+  mDNS (DNS) and WebSocket are hand-written on raw sockets on purpose:
+  packages hide the bytes.
 - **Bridge protocol** is text lines, one JSON reply per request
   (`firmware/bridge/components/bridge_protocol/bridge_protocol.h`). Firmware,
   `app/lib/protocols/bridge/` and `app/tool/fake_bridge.py` must agree; the

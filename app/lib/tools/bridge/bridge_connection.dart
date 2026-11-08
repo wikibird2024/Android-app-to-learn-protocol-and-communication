@@ -91,7 +91,8 @@ class BridgeMissing extends StatelessWidget {
             ? 'This tool talks through the ESP32 bridge. Connect it first.'
             : 'The connected bridge has no "$feature" (wrong chip or turned off in its build).'),
         const SizedBox(height: 12),
-        FilledButton(onPressed: () => context.go('/tool/bridge'), child: const Text('Open ESP32 bridge')),
+        // push, not go: go replaces this tool, so Back would skip it to Home.
+        FilledButton(onPressed: () => context.push('/tool/bridge'), child: const Text('Open ESP32 bridge')),
       ]),
     ),
   );

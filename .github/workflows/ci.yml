@@ -27,13 +27,13 @@ jobs:
       - run: flutter test
       # Our own clients against the community broker (Mosquitto) and the
       # fake bridge, which follows the same contract as the firmware.
-      - name: Integration tests (Mosquitto, fake bridge)
+      - name: Integration tests (Mosquitto, fake bridge, WebSocket echo)
         run: |
           sudo apt-get install -y --no-install-recommends mosquitto >/dev/null
           mosquitto -p 18830 -d
-          python3 tool/fake_bridge.py --port 13333 --modbus-port 11502 &
+          python3 tool/fake_bridge.py --port 13333 --modbus-port 11502 --ws-port 18081 &
           sleep 1
-          MQTT_TEST_PORT=18830 FAKE_BRIDGE_PORT=13333 FAKE_MODBUS_PORT=11502 \
+          MQTT_TEST_PORT=18830 FAKE_BRIDGE_PORT=13333 FAKE_MODBUS_PORT=11502 FAKE_WS_PORT=18081 \
             flutter test --tags integration
       # Signed with the debug key (android/app/build.gradle.kts): fine for
       # side-loading on our own phones, not for the Play Store.
