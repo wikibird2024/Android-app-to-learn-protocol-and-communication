@@ -41,7 +41,7 @@ void main() {
       await tester.tap(row);
       await tester.pumpAndSettle();
       if (id != 'lora') {
-        expect(find.text('Configure'), findsOneWidget);
+        expect(find.text('Setup'), findsOneWidget);
         await tester.tap(find.text('Learn'));
         await tester.pumpAndSettle();
       }

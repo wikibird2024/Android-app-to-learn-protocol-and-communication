@@ -151,7 +151,10 @@ class _I2cToolState extends ConsumerState<I2cTool> with BridgeToolState<I2cTool>
         const SizedBox(width: 8),
         Expanded(child: LabeledField(controller: fields['scl'], label: 'SCL pin', isNumber: true)),
         const SizedBox(width: 8),
-        Expanded(child: LabeledField(controller: fields['hz'], label: 'Clock (Hz)', isNumber: true, helper: '100k std · 400k fast')),
+        Expanded(
+          child: LabeledField(controller: fields['hz'], label: 'Clock (Hz)', isNumber: true,
+              presets: const {'100000': 'standard', '400000': 'fast', '1000000': 'fast-mode plus'}),
+        ),
       ]),
       initButton('Init I2C', () => 'i2c init ${fields.number('sda', max: 48)} ${fields.number('scl', max: 48)} ${fields.number('hz', min: 1000, max: 1000000)}'),
       const Text('Needs pull-up resistors (2.2k–10k) on SDA and SCL; many sensor boards have them.'),
@@ -231,7 +234,10 @@ class _SpiToolState extends ConsumerState<SpiTool> with BridgeToolState<SpiTool>
         Expanded(child: LabeledField(controller: fields['cs'], label: 'CS', isNumber: true)),
       ]),
       Row(children: [
-        Expanded(child: LabeledField(controller: fields['hz'], label: 'Clock (Hz)', isNumber: true)),
+        Expanded(
+          child: LabeledField(controller: fields['hz'], label: 'Clock (Hz)', isNumber: true,
+              presets: const {'1000000': '1 MHz', '5000000': '5 MHz', '10000000': '10 MHz', '20000000': '20 MHz', '40000000': '40 MHz'}),
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: ChoiceField<String>(

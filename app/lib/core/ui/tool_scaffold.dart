@@ -10,7 +10,7 @@ import 'log_view.dart';
 /// Every tool has the same four tabs, so moving between protocols feels the
 /// same: set it up, use it, look inside, read the mental model.
 ///
-///   Configure │ Talk │ Inside │ Learn
+///   Setup │ Talk │ Inside │ Learn
 class ToolScaffold extends StatelessWidget {
   const ToolScaffold({
     super.key,
@@ -83,7 +83,7 @@ class ToolScaffold extends StatelessWidget {
           ],
           bottom: const TabBar(
             tabs: [
-              Tab(text: 'Configure'),
+              Tab(text: 'Setup'),
               Tab(text: 'Talk'),
               Tab(text: 'Inside'),
               Tab(text: 'Learn'),

@@ -164,7 +164,7 @@ class _MqttToolState extends ConsumerState<MqttTool> {
             ProfileBar(controllers: _fields, onLoaded: () => setState(() {})),
             LabeledField(controller: _fields['host'], label: 'Broker host', hint: 'test.mosquitto.org, 192.168.1.10'),
             Row(children: [
-              Expanded(child: LabeledField(controller: _fields['port'], label: 'Port', isNumber: true, helper: '1883 plain · 8883 TLS')),
+              Expanded(child: LabeledField(controller: _fields['port'], label: 'Port', isNumber: true, presets: const {'1883': 'plain', '8883': 'TLS'})),
               const SizedBox(width: 8),
               Expanded(child: SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('TLS'), value: _fields.text('tls') == 'true',
                   onChanged: (value) => setState(() => _fields['tls'].text = '$value'))),

@@ -121,7 +121,7 @@ class _HttpToolState extends ConsumerState<HttpTool> {
         ),
       ),
       talk: response == null
-          ? const Center(child: Text('Send a request from Configure.'))
+          ? const Center(child: Text('Send a request from Setup.'))
           : ListView(
               padding: const EdgeInsets.all(12),
               children: [

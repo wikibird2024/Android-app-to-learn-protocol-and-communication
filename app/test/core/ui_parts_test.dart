@@ -115,6 +115,21 @@ void main() {
     controller.dispose();
   });
 
+  testWidgets('a common value from the ▾ menu fills the field and clears its error', (tester) async {
+    final controller = SettingField(text: '70');
+    const presets = {'9600': 'Modbus', '115200': 'ESP32'};
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: LabeledField(controller: controller, label: 'Baud rate', isNumber: true, presets: presets))));
+    controller.refuse('a number 300..4000000');
+    await tester.pump();
+    await tester.tap(find.byTooltip('Common values'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('9600  ·  Modbus'));
+    await tester.pumpAndSettle();
+    expect(controller.text, '9600');
+    expect(find.text('a number 300..4000000'), findsNothing);
+    controller.dispose();
+  });
+
   testWidgets('What if: breaking a byte makes the decoder report the CRC', (tester) async {
     final frame = decodeModbusRtu(Uint8List.fromList([0x11, 0x03, 0x00, 0x6b, 0x00, 0x03, 0x76, 0x87]), isRequest: true).frame;
     await tester.pumpWidget(MaterialApp(theme: lightTheme, home: Scaffold(body: FrameView(frame: frame))));

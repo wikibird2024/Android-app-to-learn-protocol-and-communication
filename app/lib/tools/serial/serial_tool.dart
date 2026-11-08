@@ -106,6 +106,21 @@ class SerialSettingsForm extends StatelessWidget {
 
   static const defaults = {'baud': '115200', 'dataBits': '8', 'parity': 'none', 'stopBits': '1'};
 
+  static const commonBauds = {
+    '1200': '',
+    '2400': '',
+    '4800': '',
+    '9600': 'Modbus, GPS, HC-05',
+    '19200': 'Modbus RTU',
+    '38400': 'HC-05 AT mode',
+    '57600': '',
+    '74880': 'ESP8266 boot log',
+    '115200': 'ESP32, Arduino',
+    '230400': '',
+    '460800': '',
+    '921600': 'fast flashing',
+  };
+
   static SerialSettings read(SettingsControllers fields) => SerialSettings(
     baudRate: fields.number('baud', min: 300, max: 4000000, label: 'Baud rate'),
     dataBits: fields.number('dataBits', min: 5, max: 8, label: 'Data bits'),
@@ -122,7 +137,7 @@ class SerialSettingsForm extends StatelessWidget {
             children: [
               Expanded(
                 flex: 2,
-                child: LabeledField(controller: fields['baud'], label: 'Baud rate', isNumber: true, helper: '9600 · 115200 · 921600'),
+                child: LabeledField(controller: fields['baud'], label: 'Baud rate', isNumber: true, presets: commonBauds),
               ),
               const SizedBox(width: 8),
               Expanded(

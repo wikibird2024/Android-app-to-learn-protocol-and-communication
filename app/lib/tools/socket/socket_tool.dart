@@ -68,7 +68,12 @@ class _SocketToolState extends ConsumerState<SocketTool> {
             children: [
               ProfileBar(controllers: _fields),
               LabeledField(controller: _fields['host'], label: 'Host', hint: '192.168.1.50 or name.local'),
-              LabeledField(controller: _fields['port'], label: 'Port', isNumber: true),
+              LabeledField(
+                controller: _fields['port'],
+                label: 'Port',
+                isNumber: true,
+                presets: const {'80': 'HTTP', '502': 'Modbus TCP', '1883': 'MQTT', '3333': 'ESP32 bridge', '5683': 'CoAP (UDP)'},
+              ),
               if (widget.isUdp)
                 LabeledField(controller: _fields['localPort'], label: 'Local port', isNumber: true, helper: '0 = any free port'),
               if (!widget.isUdp)

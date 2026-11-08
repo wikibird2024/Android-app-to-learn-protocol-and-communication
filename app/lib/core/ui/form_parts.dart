@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../settings/tool_settings.dart';
 
-/// A scrolling column with the gaps every Configure tab wants.
+/// A scrolling column with the gaps every Setup tab wants.
 class FormColumn extends StatelessWidget {
   const FormColumn({super.key, required this.children});
 
@@ -31,6 +31,7 @@ class LabeledField extends StatelessWidget {
     this.isSecret = false,
     this.maxLines = 1,
     this.helper,
+    this.presets,
   });
 
   final TextEditingController controller;
@@ -41,16 +42,41 @@ class LabeledField extends StatelessWidget {
   final bool isSecret;
   final int maxLines;
 
+  /// Common values (value → what uses it) offered in a ▾ menu; typing any
+  /// other value still works.
+  final Map<String, String>? presets;
+
   @override
   Widget build(BuildContext context) {
     final controller = this.controller;
+    final presets = this.presets;
+    final menu = presets == null
+        ? null
+        : PopupMenuButton<String>(
+            icon: const Icon(Icons.arrow_drop_down),
+            tooltip: 'Common values',
+            onSelected: (value) => controller.text = value,
+            itemBuilder: (context) => [
+              for (final MapEntry(key: value, value: use) in presets.entries)
+                PopupMenuItem(value: value, child: Text(use.isEmpty ? value : '$value  ·  $use')),
+            ],
+          );
     Widget field(String? error) => TextField(
       controller: controller,
       obscureText: isSecret,
       maxLines: isSecret ? 1 : maxLines,
       keyboardType: isNumber ? TextInputType.number : null,
       inputFormatters: isNumber ? [FilteringTextInputFormatter.digitsOnly] : null,
-      decoration: InputDecoration(labelText: label, hintText: hint, helperText: helper, errorText: error, errorMaxLines: 2, border: const OutlineInputBorder(), isDense: true),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        helperText: helper,
+        errorText: error,
+        errorMaxLines: 2,
+        border: const OutlineInputBorder(),
+        isDense: true,
+        suffixIcon: menu,
+      ),
     );
     if (controller is! SettingField) return field(null);
     return ValueListenableBuilder(valueListenable: controller.error, builder: (context, error, _) => field(error));
