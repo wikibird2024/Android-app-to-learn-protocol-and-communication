@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../../core/inspect/frame.dart';
 import '../field_reader.dart';
+import 'ndef_build.dart';
 
 /// NDEF (NFC Forum Data Exchange Format): the message a phone reads from a
 /// tag. Parsing and encoding for real use comes from the community package
@@ -55,6 +56,14 @@ Frame describeNdef(Uint8List bytes) {
 }
 
 String _payloadText(int tnf, Uint8List type, Uint8List payload) {
+  if (tnf == 0) return 'empty record';
+  if (tnf == 2 && ascii.decode(type, allowInvalid: true) == wifiMimeType) {
+    final attributes = wscAttributes(payload);
+    final ssid = utf8.decode(attributes[wscSsid] ?? [], allowMalformed: true);
+    final authType = attributes[wscAuthType];
+    final isOpen = authType != null && authType.length == 2 && authType[1] == 0x01;
+    return 'Wi-Fi "$ssid" ${isOpen ? 'open' : 'with password'}';
+  }
   if (tnf == 1 && type.length == 1 && payload.isNotEmpty) {
     if (type[0] == 0x54) {
       // Text: status byte (bit 7 UTF-16, bits 5..0 language length), language, text.
