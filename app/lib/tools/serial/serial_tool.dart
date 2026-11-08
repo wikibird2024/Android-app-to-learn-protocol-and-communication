@@ -213,6 +213,9 @@ class _SerialToolState extends ConsumerState<SerialTool> {
         title: 'Serial terminal',
         log: _session.log,
         status: _session.isOpen ? _session.link!.description : 'not connected',
+        isConnected: _session.isOpen,
+        onConnect: _toggle,
+        isBusy: _session.isBusy,
         pcapLink: const PcapUser(),
         configure: Builder(
           builder: (tabContext) => FormColumn(

@@ -57,6 +57,9 @@ class _SocketToolState extends ConsumerState<SocketTool> {
         title: widget.isUdp ? 'UDP socket' : 'TCP socket',
         log: _session.log,
         status: _session.isOpen ? _session.link!.description : 'not connected',
+        isConnected: _session.isOpen,
+        onConnect: _toggleFrom,
+        isBusy: _session.isBusy,
         pcapLink: widget.isUdp
             ? PcapUdp(int.tryParse(_fields.text('port')) ?? 0)
             : PcapTcp(int.tryParse(_fields.text('port')) ?? 0),

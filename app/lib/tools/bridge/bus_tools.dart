@@ -84,6 +84,7 @@ mixin BridgeToolState<T extends ConsumerStatefulWidget> on ConsumerState<T> {
           title: title,
           log: log,
           status: connection.description,
+          isConnected: connection.isConnected,
           pcapLink: pcapLink,
           configure: isMissing ? BridgeMissing(feature: connection.isConnected ? feature : null) : configure,
           talk: isMissing ? BridgeMissing(feature: connection.isConnected ? feature : null) : talk,

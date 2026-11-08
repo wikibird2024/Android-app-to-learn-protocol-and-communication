@@ -16,25 +16,27 @@ import 'socket/socket_tool.dart';
 import 'websocket/websocket_tool.dart';
 
 enum ToolLayer {
-  network('Network / IoT', 'Over Wi-Fi or mobile data, straight from the phone'),
-  wireless('Wireless', 'Radios: the phone\'s own, or the bridge\'s'),
-  wired('Wired buses', 'Through USB-OTG or the ESP32 bridge');
+  network('Network / IoT', 'Over Wi-Fi or mobile data, straight from the phone', Icons.public),
+  wireless('Wireless', 'Radios: the phone\'s own, or the bridge\'s', Icons.wifi_tethering),
+  wired('Wired buses', 'Through USB-OTG or the ESP32 bridge', Icons.settings_ethernet);
 
-  const ToolLayer(this.title, this.subtitle);
+  const ToolLayer(this.title, this.subtitle, this.icon);
   final String title;
   final String subtitle;
+  final IconData icon;
 }
 
 /// What a tool needs besides the phone.
 enum ToolNeeds {
-  phone('phone'),
-  usbAdapter('USB-OTG adapter'),
-  bridge('ESP32 bridge'),
-  bridgeC6('bridge on ESP32-C6'),
-  learnOnly('notes only');
+  phone('phone', Icons.smartphone),
+  usbAdapter('USB-OTG adapter', Icons.usb),
+  bridge('ESP32 bridge', Icons.developer_board),
+  bridgeC6('bridge on ESP32-C6', Icons.developer_board),
+  learnOnly('notes only', Icons.menu_book);
 
-  const ToolNeeds(this.label);
+  const ToolNeeds(this.label, this.icon);
   final String label;
+  final IconData icon;
 }
 
 class ToolInfo {

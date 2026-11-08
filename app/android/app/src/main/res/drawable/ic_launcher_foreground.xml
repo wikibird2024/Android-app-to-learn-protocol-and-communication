@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Protocol Lab: two devices and the square-wave signal between them.
+     108 dp canvas; everything stays inside the 66 dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFF"
+        android:strokeWidth="4" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M37,54 H42 V40 H50 V68 H58 V40 H66 V54 H71" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M24,54 a6,6 0 1,1 12,0 a6,6 0 1,1 -12,0 Z" />
+    <path android:fillColor="#FFC857"
+        android:pathData="M72,54 a6,6 0 1,1 12,0 a6,6 0 1,1 -12,0 Z" />
+</vector>

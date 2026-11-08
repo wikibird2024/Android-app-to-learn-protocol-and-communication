@@ -34,7 +34,10 @@ void main() {
       await _pumpApp(tester);
       final tool = toolById(id)!;
       final row = find.byKey(ValueKey('tool-${tool.id}'));
-      await tester.scrollUntilVisible(row, 200);
+      // Reach the tool through the home search (a scrolled row can sit under
+      // a pinned group header, where a tap hits the header).
+      await tester.enterText(find.descendant(of: find.byType(SearchBar), matching: find.byType(EditableText)), tool.name);
+      await tester.pumpAndSettle();
       await tester.tap(row);
       await tester.pumpAndSettle();
       if (id != 'lora') {
@@ -42,13 +45,13 @@ void main() {
         await tester.tap(find.text('Learn'));
         await tester.pumpAndSettle();
       }
-      expect(find.text('No notes for this tool yet.'), findsNothing, reason: 'assets/learn/$id.txt missing');
+      expect(find.text('No notes for this tool yet.'), findsNothing, reason: 'assets/learn/$id.md missing');
     });
   }
 
   test('every tool has a Learn note', () {
     for (final tool in toolCatalog) {
-      final file = File('assets/learn/${tool.id}.txt');
+      final file = File('assets/learn/${tool.id}.md');
       expect(file.existsSync() && file.readAsStringSync().trim().isNotEmpty, isTrue, reason: tool.id);
     }
   });

@@ -265,7 +265,7 @@ class _GattScreenState extends ConsumerState<_GattScreen> {
             icon: const Icon(Icons.list_alt),
             tooltip: 'Log',
             onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => Scaffold(appBar: AppBar(title: const Text('BLE log')), body: LogView(log: widget.log)),
+              builder: (_) => Scaffold(appBar: AppBar(title: const Text('BLE log')), body: LogView(log: widget.log, showTools: true)),
             )),
           ),
         ],

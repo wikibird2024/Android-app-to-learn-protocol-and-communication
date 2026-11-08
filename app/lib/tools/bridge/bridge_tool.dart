@@ -79,6 +79,9 @@ class _BridgeToolState extends ConsumerState<BridgeTool> {
         title: 'ESP32 bridge',
         log: bridge.log,
         status: bridge.description,
+        isConnected: bridge.isConnected,
+        onConnect: _toggle,
+        isBusy: _isBusy,
         pcapLink: const PcapUser(),
         configure: Builder(
           builder: (tabContext) => FormColumn(

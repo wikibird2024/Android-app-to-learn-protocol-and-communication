@@ -49,7 +49,8 @@ CI turns APK build errors into a readable annotation.
   state in `cmd_*.c` has a single user. Events (CAN rx, ESP-NOW, Zigbee
   joins) go out with `BridgeIo_SendEvent`. Zigbee is built only when the
   chip has 802.15.4 (`CONFIG_BRIDGE_ZIGBEE`, C6/H2).
-- Each tool has a Learn note `app/assets/learn/<tool id>.txt`; a test fails
+- Each tool has a Learn note `app/assets/learn/<tool id>.md`
+  (Markdown, rendered by flutter_markdown_plus); a test fails
   when one is missing.
 
 ## Known gaps

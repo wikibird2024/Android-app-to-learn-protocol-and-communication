@@ -155,6 +155,9 @@ class _ModbusToolState extends ConsumerState<ModbusTool> {
       title: 'Modbus master',
       log: _log,
       status: _master == null ? 'not connected' : '${_mode.name.toUpperCase()} · ok $_okCount · failed $_failCount',
+      isConnected: _master != null,
+      onConnect: _toggleConnection,
+      isBusy: _isBusy,
       pcapLink: _mode == ModbusMode.tcp ? PcapTcp(int.tryParse(_fields.text('port')) ?? 502) : const PcapUser(),
       configure: Builder(
         builder: (tabContext) => FormColumn(

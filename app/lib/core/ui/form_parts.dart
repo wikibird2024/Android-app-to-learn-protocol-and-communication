@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -39,14 +42,43 @@ class LabeledField extends StatelessWidget {
   final int maxLines;
 
   @override
-  Widget build(BuildContext context) => TextField(
-    controller: controller,
-    obscureText: isSecret,
-    maxLines: isSecret ? 1 : maxLines,
-    keyboardType: isNumber ? TextInputType.number : null,
-    inputFormatters: isNumber ? [FilteringTextInputFormatter.digitsOnly] : null,
-    decoration: InputDecoration(labelText: label, hintText: hint, helperText: helper, border: const OutlineInputBorder(), isDense: true),
-  );
+  Widget build(BuildContext context) {
+    final controller = this.controller;
+    Widget field(String? error) => TextField(
+      controller: controller,
+      obscureText: isSecret,
+      maxLines: isSecret ? 1 : maxLines,
+      keyboardType: isNumber ? TextInputType.number : null,
+      inputFormatters: isNumber ? [FilteringTextInputFormatter.digitsOnly] : null,
+      decoration: InputDecoration(labelText: label, hintText: hint, helperText: helper, errorText: error, errorMaxLines: 2, border: const OutlineInputBorder(), isDense: true),
+    );
+    if (controller is! SettingField) return field(null);
+    return ValueListenableBuilder(valueListenable: controller.error, builder: (context, error, _) => field(error));
+  }
+}
+
+/// A settings text field that can show why its value was refused, right
+/// under the field (not only in a snackbar that disappears).
+class SettingField extends TextEditingController {
+  SettingField({super.text}) {
+    addListener(() {
+      if (text != _checkedText) error.value = null; // the user is fixing it
+    });
+  }
+
+  final error = ValueNotifier<String?>(null);
+  String? _checkedText;
+
+  void refuse(String message) {
+    _checkedText = text;
+    error.value = message;
+  }
+
+  @override
+  void dispose() {
+    error.dispose();
+    super.dispose();
+  }
 }
 
 /// Choice from a short fixed list (QoS, parity, function code).
@@ -76,13 +108,13 @@ class SettingsControllers {
   SettingsControllers(this.settings, Map<String, String> defaults)
     : controllers = {
         for (final entry in defaults.entries)
-          entry.key: TextEditingController(text: settings.value(entry.key, entry.value)),
+          entry.key: SettingField(text: settings.value(entry.key, entry.value)),
       };
 
   final ToolSettings settings;
-  final Map<String, TextEditingController> controllers;
+  final Map<String, SettingField> controllers;
 
-  TextEditingController operator [](String key) => controllers[key]!;
+  SettingField operator [](String key) => controllers[key]!;
 
   String text(String key) => controllers[key]!.text.trim();
 
@@ -90,6 +122,7 @@ class SettingsControllers {
   int number(String key, {int min = 0, int max = 0x7fffffff, String? label}) {
     final value = int.tryParse(text(key));
     if (value == null || value < min || value > max) {
+      controllers[key]!.refuse('a number $min..$max');
       throw FormatException('${label ?? key}: a number $min..$max');
     }
     return value;
@@ -175,14 +208,41 @@ class _ProfileBarState extends State<ProfileBar> {
   }
 }
 
-/// Shows an error the way every tool does: a snackbar with the message.
+/// An error in words a bench user can act on: what failed and what to
+/// check. Connection errors from the OS get a hint; the rest keep their
+/// message.
+String friendlyError(Object error) => switch (error) {
+  FormatException(:final message) => message,
+  ArgumentError(:final message) => '$message',
+  SocketException(:final message, :final osError) => _socketHint('$message ${osError?.message ?? ''}', error),
+  TimeoutException() => 'No reply in time. Check the address, that the phone and the device share a network, and that the device is powered.',
+  TlsException() => 'TLS failed: plain port vs TLS port mixed up (MQTT 1883 vs 8883), or the server certificate is not trusted.',
+  _ => '$error',
+};
+
+String _socketHint(String text, SocketException error) {
+  final lower = text.toLowerCase();
+  if (lower.contains('refused')) {
+    return 'Connection refused: the host answered, but nothing listens on port ${error.port ?? '?'}. Is the server / broker running?';
+  }
+  if (lower.contains('host lookup') || lower.contains('no address')) {
+    return 'Host name not found. Check the spelling, or use the IP address (mDNS finder).';
+  }
+  if (lower.contains('timed out') || lower.contains('unreachable')) {
+    return 'No answer from the host. Is the phone on the same Wi-Fi as the device?';
+  }
+  return 'Network error: $text';
+}
+
+/// Shows an error the way every tool does: a snackbar that stays until it
+/// is read (8 s or closed), with a hint from [friendlyError].
 void showError(BuildContext context, Object error) {
-  final text = switch (error) {
-    FormatException(:final message) => message,
-    ArgumentError(:final message) => '$message',
-    _ => '$error',
-  };
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(text)));
+    ..showSnackBar(SnackBar(
+      content: Text(friendlyError(error)),
+      behavior: SnackBarBehavior.floating,
+      showCloseIcon: true,
+      duration: const Duration(seconds: 8),
+    ));
 }

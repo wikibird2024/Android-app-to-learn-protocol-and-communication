@@ -154,6 +154,9 @@ class _MqttToolState extends ConsumerState<MqttTool> {
       title: 'MQTT',
       log: _log,
       status: '${_state.name}${isConnected ? ' · ${_fields.text('host')}' : ''}',
+      isConnected: isConnected,
+      onConnect: _connect,
+      isBusy: _isBusy,
       pcapLink: PcapTcp(int.tryParse(_fields.text('port')) ?? 1883),
       configure: Builder(
         builder: (tabContext) => FormColumn(

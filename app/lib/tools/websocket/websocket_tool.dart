@@ -88,6 +88,9 @@ class _WebSocketToolState extends ConsumerState<WebSocketTool> {
       title: 'WebSocket',
       log: _log,
       status: _socket == null ? 'closed' : 'open',
+      isConnected: _socket != null,
+      onConnect: _toggle,
+      isBusy: _isBusy,
       configure: Builder(
         builder: (tabContext) => FormColumn(
           children: [
