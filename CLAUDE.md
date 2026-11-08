@@ -27,6 +27,13 @@ clang-format -i firmware/bridge/main/*.[ch] firmware/bridge/components/*/*.[ch]
 APK and firmware are built only in GitHub CI (disk on this machine is tight);
 CI turns APK build errors into a readable annotation.
 
+Release signing: one fixed key so each APK installs as an update. The
+keystore lives in `~/HaoTran/keys/` (never in the repo; back it up: losing it
+means no more updates). CI reads the repo secrets `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`;
+versionCode = CI run number. The "APK signer" notice must show SHA-256
+`EA:FB:85:A2:…:CF:7A`; a warning instead means the secrets are missing.
+
 ## Architecture rules
 
 - **Codec = pure, Link = I/O, Tool = glue.** `lib/protocols/<p>/` has no

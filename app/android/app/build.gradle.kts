@@ -27,10 +27,26 @@ android {
         versionName = flutter.versionName
     }
 
+    // One fixed release key, so each new APK installs as an update over the
+    // last one (Android refuses an update signed by a different key). CI
+    // writes the keystore from the ANDROID_KEYSTORE_BASE64 secret and sets
+    // these variables; the key itself never enters the repo. Without them
+    // (a local build, a fork's PR) the APK falls back to the debug key.
+    val releaseKeystore = System.getenv("ANDROID_KEYSTORE_PATH")
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // Debug key: fine for side-loading the CI APK, not for the Play Store.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
         }
     }
 }

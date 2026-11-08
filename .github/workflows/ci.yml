@@ -35,19 +35,42 @@ jobs:
           sleep 1
           MQTT_TEST_PORT=18830 FAKE_BRIDGE_PORT=13333 FAKE_MODBUS_PORT=11502 FAKE_WS_PORT=18081 \
             flutter test --tags integration
-      # Signed with the debug key (android/app/build.gradle.kts): fine for
-      # side-loading on our own phones, not for the Play Store.
+      # One fixed release key (repo secrets), so every APK installs as an
+      # update over the previous one. Without the secrets (a fork's PR) the
+      # build falls back to a throwaway debug key and says so.
+      - name: Release signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning title=APK signing::No ANDROID_KEYSTORE_BASE64 secret: signed with a throwaway debug key, so this APK will not install over an earlier one."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
       # Job logs need a login to read; on failure the key lines also go out
       # as an annotation, which anyone can read through the API.
+      # --build-number: the run number becomes versionCode, so each APK is
+      # newer than the last (Android refuses to install an older one).
       - name: Build APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -o pipefail
-          if ! flutter build apk --release 2>&1 | tee build.log; then
+          if ! flutter build apk --release --build-number=${{ github.run_number }} 2>&1 | tee build.log; then
             summary=$(grep -iE "error|what went wrong|failed|exception|could not|unresolved" -A4 build.log \
                       | grep -v "^--$" | head -80 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
             echo "::error title=flutter build apk::${summary}"
             exit 1
           fi
+      # The signer's fingerprint as a notice, so anyone can check through
+      # the API that the fixed key signed it (only the public certificate).
+      - name: Show APK signer
+        run: |
+          fingerprint=$(keytool -printcert -jarfile build/app/outputs/flutter-apk/app-release.apk | grep -m1 "SHA256:" | sed 's/.*SHA256: //')
+          echo "::notice title=APK signer SHA-256 (versionCode ${{ github.run_number }})::${fingerprint}"
       - name: Keep APK
         uses: actions/upload-artifact@v4
         with:
