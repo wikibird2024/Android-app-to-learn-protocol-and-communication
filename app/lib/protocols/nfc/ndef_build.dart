@@ -37,11 +37,19 @@ const wscMacAddress = 0x1020;
 
 /// Wi-Fi credential payload: one Credential TLV holding SSID, auth,
 /// encryption and key. An empty password means an open network.
+/// Throws [FormatException] on input a phone would refuse to join with:
+/// SSID 1-32 bytes, WPA2 passphrase 8-63 characters. A raw 64-hex-digit
+/// key is not supported (shortcut: passphrases cover bench use).
 Uint8List wifiPayload({required String ssid, required String password}) {
+  final ssidBytes = utf8.encode(ssid);
+  if (ssidBytes.isEmpty || ssidBytes.length > 32) throw const FormatException('SSID: 1-32 bytes');
   final isOpen = password.isEmpty;
+  if (!isOpen && (password.length < 8 || password.length > 63)) {
+    throw const FormatException('password: 8-63 characters (or empty = open)');
+  }
   final credential = [
     ..._tlv(wscNetworkIndex, [0x01]),
-    ..._tlv(wscSsid, utf8.encode(ssid)),
+    ..._tlv(wscSsid, ssidBytes),
     ..._tlv(wscAuthType, isOpen ? [0x00, 0x01] : [0x00, 0x20]), // open / WPA2-Personal
     ..._tlv(wscEncryptionType, isOpen ? [0x00, 0x01] : [0x00, 0x08]), // none / AES
     ..._tlv(wscNetworkKey, utf8.encode(password)),

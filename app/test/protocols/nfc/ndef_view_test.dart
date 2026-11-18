@@ -48,6 +48,14 @@ void main() {
     expect(toHex(wscAttributes(wifiPayload(ssid: 'cafe', password: ''))[wscAuthType]!), '00 01');
   });
 
+  test('Wi-Fi payload refuses inputs phones reject', () {
+    expect(() => wifiPayload(ssid: 'x', password: '1234'), throwsFormatException);
+    expect(() => wifiPayload(ssid: 'x', password: 'a' * 64), throwsFormatException);
+    expect(() => wifiPayload(ssid: '', password: 'secret12'), throwsFormatException);
+    expect(() => wifiPayload(ssid: 's' * 33, password: ''), throwsFormatException);
+    expect(wifiPayload(ssid: 's' * 32, password: ''), isNotEmpty); // open network
+  });
+
   test('cut-off Wi-Fi payload does not throw', () {
     expect(wscAttributes(parseHex('10 0e 00 40 10 45')), isEmpty);
   });

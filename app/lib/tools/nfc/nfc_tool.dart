@@ -242,13 +242,15 @@ class _NfcToolState extends ConsumerState<NfcTool> {
     return isConfirmed ?? false;
   }
 
-  String _messageSize() {
-    try {
-      final message = _messageToWrite;
-      final count = message.records.length;
-      return '$count record${count == 1 ? '' : 's'}, ${message.byteLength} bytes';
-    } on Object {
-      return 'record too long';
+  /// Stops a waiting session, so an armed Lock or Erase cannot hit the
+  /// next tag that happens to come near the phone.
+  Future<void> _cancel() async {
+    await NfcManager.instance.stopSession().catchError((Object _) {});
+    if (mounted) {
+      setState(() {
+        _isSessionOpen = false;
+        _status = 'cancelled';
+      });
     }
   }
 
@@ -257,6 +259,17 @@ class _NfcToolState extends ConsumerState<NfcTool> {
     final kind = _fields.text('kind');
     final heading = Theme.of(context).textTheme.titleSmall;
     final copied = _copiedMessage;
+    // A bad form (e.g. a 4-character Wi-Fi password) disables Write and
+    // shows why, instead of writing a tag no phone can use.
+    NdefMessage? message;
+    String writeLabel;
+    try {
+      message = _messageToWrite;
+      final count = message.records.length;
+      writeLabel = 'Write ($count record${count == 1 ? '' : 's'}, ${message.byteLength} bytes)';
+    } on FormatException catch (error) {
+      writeLabel = error.message;
+    }
     return ToolScaffold(
       toolId: 'nfc',
       title: 'NFC tags',
@@ -297,7 +310,7 @@ class _NfcToolState extends ConsumerState<NfcTool> {
             ),
             if (kind == 'wifi') ...[
               LabeledField(controller: _fields['ssid'], label: 'Network name (SSID)'),
-              LabeledField(controller: _fields['password'], label: 'Password', helper: 'empty = open network; WPA2 otherwise', isSecret: true),
+              LabeledField(controller: _fields['password'], label: 'Password', helper: 'empty = open network; WPA2: 8-63 characters', isSecret: true),
             ] else
               LabeledField(controller: _fields['text'], label: kind == 'uri' ? 'URI' : 'Text'),
             for (final (index, record) in _addedRecords.indexed)
@@ -307,12 +320,12 @@ class _NfcToolState extends ConsumerState<NfcTool> {
               ),
             Wrap(spacing: 8, runSpacing: 8, children: [
               FilledButton.icon(
-                onPressed: _isSessionOpen ? null : () => _start(_TagJob.write, tabContext, message: _messageToWrite),
+                onPressed: _isSessionOpen || message == null ? null : () => _start(_TagJob.write, tabContext, message: message),
                 icon: const Icon(Icons.edit),
-                label: Text('Write (${_messageSize()})'),
+                label: Text(writeLabel),
               ),
               TextButton.icon(
-                onPressed: () => setState(() => _addedRecords.add(_recordFromForm())),
+                onPressed: message == null ? null : () => setState(() => _addedRecords.add(_recordFromForm())),
                 icon: const Icon(Icons.add),
                 label: const Text('Add another record'),
               ),
@@ -355,6 +368,7 @@ class _NfcToolState extends ConsumerState<NfcTool> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.nfc, size: 64, color: _isSessionOpen ? Theme.of(context).colorScheme.primary : null),
           Text(_status),
+          if (_isSessionOpen) OutlinedButton.icon(onPressed: _cancel, icon: const Icon(Icons.close), label: const Text('Cancel')),
           if (_lastTag.isNotEmpty) Padding(padding: const EdgeInsets.all(12), child: Text(_lastTag, style: monospace, textAlign: TextAlign.center)),
           const Text('Tap the Inside tab to see the bytes.'),
         ]),
